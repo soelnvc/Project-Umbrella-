@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 
 from src.core.models import Span
-from src.detect import patterns, profiler, vocab
+from src.detect import patterns, profiler, shield, vocab
 from src.ingest.parsers import ParsedFile
 
 P_FIELD = 60          # a whole field classified by the profiler or a FHIR rule
@@ -61,8 +61,12 @@ def field_spans(value: str, ftype: str, source: str = "field") -> list[Span]:
 
 def _text_spans(value: str, ftype: str) -> list[Span]:
     if ftype == profiler.DOCTOR:
-        return patterns.find_identifiers(value)
-    return patterns.find_all(value)
+        spans = patterns.find_identifiers(value)
+        if value.strip():
+            spans.append(Span(view=-1, start=0, end=len(value), type="PROTECTED", role="protected",
+                              action="keep", source="doctor", priority=100))
+        return spans
+    return patterns.find_all(value) + shield.find_protected(value)
 
 
 # --------------------------------------------------------------------------- tables
@@ -213,7 +217,7 @@ def _detect_fhir(parsed: ParsedFile) -> None:
         elif rtype in _FHIR_STAFF and "name" in inner:
             spans = patterns.find_identifiers(text)
         elif isinstance(value, str):
-            spans = patterns.find_all(text)
+            spans = patterns.find_all(text) + shield.find_protected(text)
         _mark_leaf(parsed, path, value, spans)
 
 
@@ -228,7 +232,7 @@ def detect(parsed: ParsedFile) -> None:
     elif parsed.fmt == "json":
         _detect_json(parsed)
     else:
-        spans = patterns.find_all(parsed.text)
+        spans = patterns.find_all(parsed.text) + shield.find_protected(parsed.text)
         if spans:
             parsed.spans[("text",)] = spans
 
@@ -237,5 +241,6 @@ def entity_counts(parsed: ParsedFile, resolve) -> Counter:
     counts: Counter = Counter()
     for spans in parsed.spans.values():
         for span in resolve(spans):
-            counts[span.type] += 1
+            if span.action != "keep":
+                counts[span.type] += 1
     return counts

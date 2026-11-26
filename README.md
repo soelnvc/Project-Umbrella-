@@ -52,6 +52,24 @@ Detection only marks spans of text; a single writer (`src/rewrite/spans.py`) res
 - **Replacements:** typed placeholders (`[NAME]`, `[RELATIVE]`, `[PHONE]`, `[AADHAAR]`, `[ABHA]`, `[PAN]`, `[EMAIL]`, `[INSURANCE_ID]`). Hospital record and visit numbers become keyed tokens (`ID-XXXXXXXX`, HMAC with a subkey of `RAKSHA_SECRET`), so the same number maps to the same token in every file without being reversible. No partial digits are kept. An identifier stored as a JSON number becomes `0`, keeping the type.
 - **Word lists** (`config/lexicons/`): common Indian given names and surnames in Latin and Devanagari, used only as supporting evidence for unlabelled columns.
 
+## The clinical shield
+
+`src/detect/shield.py` marks text that name and address detection must never remove. It covers the ten scored trap groups and the rest of the clinical record:
+
+| Protected | Examples |
+|---|---|
+| Doctors, including a doctor who shares a relative's first name | `Dr. Ramesh Srivastava (MD Medicine)`, `डॉ. रमेश` |
+| Doses, frequencies, durations | `Ramipril 5 mg`, `100 mg + 0.5 mg`, `1-0-1`, `Dolo 650 BD x 5 days`, `6 दिन से` |
+| Complaints after `C/O` | kept when the words are symptoms or carry a duration (`C/O pain abdomen x 6 days`); `C/O Naresh Chauhan` is a person |
+| History | `K/C/O DM2 x 6 yrs`, `H/O TB 8 yrs back`, `No H/O DM/HTN` |
+| Hospital wards and beds, outside addresses | `Ward 8 (Medicine)`, `4 (Medicine)`, `Bed 29` (a municipal `Ward 20` in an address is not protected) |
+| Diseases and devices named after people | `Addison's disease`, `Bell's palsy`, `Whipple procedure`, `Foley catheter` |
+| ASHA as a job title, not the name Asha | `Referred by ASHA worker` (but `Name: ASHA RAJPUT` is a name) |
+| Hospital and lab names | `Jeevan Jyoti Charitable Hospital`, `Pathkind Labs` |
+| Medical words, districts and short codes | drug names and brands, symptoms in three scripts, test and diagnosis words, specialties, Hindi grammar words, the 75 Uttar Pradesh districts, `HbA1c`, `SpO2`, `SG039B` |
+
+Protection blocks only name and address spans: phone numbers and other identifiers are removed even inside protected text. A whole field already classified as a patient's name is overridden only by a doctor protection, and after an explicit label (`Name:`) a word-list match can only trim trailing words, so a patient whose name is also a listed word still has the name removed. On the practice data, the shield covers all but two of the 4,383 capitalised or Devanagari words that appear inside medical values.
+
 ## How it works
 
 The pipeline runs in five passes:
@@ -78,7 +96,7 @@ A single file ledger tracks every input file from start to finish, so no file is
 | `src/ingest/` | file walk, format detection from content, encoding rules, parsers, depth-proof JSON |
 | `src/detect/` | identifier and name patterns, the column and field profiler, the detection engine, field and label words |
 | `src/rewrite/` | the span writer, applying spans to fields, writing each file back in its original format |
-| `config/lexicons/` | common Indian name lists in Latin and Devanagari |
+| `config/lexicons/` | name lists, medical word lists (drugs, symptoms, eponyms, clinical terms, Hindi medical words), grammar words, Uttar Pradesh districts |
 | `config/policy.yaml` | privacy settings |
 | `raksha.toml` | how the organizers set up and run the submission |
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 
-from src.detect import patterns, vocab
+from src.detect import patterns, shield, vocab
 
 NAME = "name"
 RELATIVE = "relative"
@@ -36,7 +36,7 @@ def relation_cue_end(value: str) -> int | None:
     m = _CARE_OF.match(value)
     if m:
         rest = value[m.end():].strip(" ,:-")
-        if patterns.name_shaped(rest) and all(t[:1].isupper() for t in rest.split()):
+        if patterns.name_shaped(rest) and not shield.complaint_like(rest):
             return m.end()
     return None
 

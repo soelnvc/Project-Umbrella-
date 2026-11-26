@@ -96,7 +96,23 @@ def _load(name: str) -> frozenset[str]:
                      if line.strip() and not line.startswith("#"))
 
 
+def _split(entries: frozenset[str]) -> tuple[frozenset[str], frozenset[str]]:
+    """(single words, multi-word phrases)."""
+    return (frozenset(e for e in entries if " " not in e), frozenset(e for e in entries if " " in e))
+
+
 GIVEN_NAMES = _load("given_names.txt")
 SURNAMES = _load("surnames.txt")
 DEVANAGARI_NAMES = _load("names_devanagari.txt")
 ALL_NAMES = GIVEN_NAMES | SURNAMES | DEVANAGARI_NAMES
+
+DRUGS = _load("drugs.txt")
+SYMPTOMS = _load("symptoms.txt")
+SYMPTOMS_HINGLISH = _load("symptoms_hinglish.txt")
+EPONYMS = _load("eponyms.txt")
+CLINICAL = _load("clinical_terms.txt")
+HINDI_MEDICAL = _load("hindi_medical.txt")
+HINGLISH_FUNCTION = _load("hinglish_function_words.txt")
+DISTRICT_WORDS, DISTRICT_PHRASES = _split(_load("districts_up.txt"))
+MEDICAL_WORDS = DRUGS | SYMPTOMS | CLINICAL | HINDI_MEDICAL | DISTRICT_WORDS
+LOWER_CASE_ONLY = SYMPTOMS_HINGLISH | HINGLISH_FUNCTION
