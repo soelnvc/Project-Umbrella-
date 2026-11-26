@@ -123,10 +123,12 @@ Protection blocks only name and address spans: phone numbers and other identifie
 
 `src/release/` checks every output file in memory before anything is written:
 
-- **Format:** the output must be valid UTF-8 and parse in its own format, with the same shape as the input: the same CSV rows and cells per row, the same JSON structure and value types (a number becoming an age band is the one allowed change), the same text line count. FHIR bundles must also have known resource types, references that resolve inside the bundle, valid FHIR dates and decodable attachments.
+- **Format:** the output must be valid UTF-8 and parse in its own format, with the same shape as the input: the same CSV rows and cells per row, the same JSON structure and value types (the only allowed changes are a number becoming an age band and a FHIR value replaced by the standard "masked" marker), the same text line count. FHIR bundles must also have known resource types, references that resolve inside the bundle, valid FHIR dates and decodable attachments.
 - **Leaks:** every identifier and full name detected in the file must be gone, read the way the organizers read output: case and spacing ignored, base64 decoded, and numbers matched across spaces, dashes and dots. A name may remain only as often as it appeared inside protected text, such as a doctor who shares a relative's name.
 - **One repair, then quarantine:** leftover plain text is replaced once and the file is checked again. If it still fails, it is quarantined with `leak_check_failed` or `format_check_failed`.
 - **Re-planning:** when a file is quarantined, the remaining files are read again from the input, and linking and the privacy plan are redone without it (at most three rounds, `replan_max_rounds`), so look-alike groups and links describe only what is released.
+
+If linking or the privacy plan fails, the run continues: records stay unlinked, or quasi-identifiers are left ungeneralised, but personal data is still removed and the gate still checks every file.
 
 ## Measured privacy
 
@@ -150,28 +152,12 @@ The pipeline runs on one CPU core, with the standard library only. `tools/scale_
 | Input | Records | Seconds | Peak memory |
 |---|---:|---:|---:|
 | Practice data (200 files) | 815 | 1.4 | 53 MB |
-| 16 scrambled copies | 13,049 | 21 | 287 MB |
-| 32 scrambled copies | 26,107 | 43 | 540 MB |
+| 16 scrambled copies | 13,049 | 21 | 273 MB |
+| 32 scrambled copies | 26,107 | 43 | 510 MB |
 | One 4 MB CSV register | 32,000 | 45 | 647 MB |
-| One 25 MB JSON bulk export | 144,000 | 104 | 1.7 GB |
+| One 25 MB JSON bulk export | 144,000 | 104 | 1.6 GB |
 
-Run time grows linearly with the input (growth exponent 0.99 to 1.03). Work that compares records with each other is indexed: one-word names are only compared with full names sharing a consonant skeleton, records with identical clues are checked for conflicts once, a JSON record's fields are read from its own subtree, and the release gate reads each output once into an index instead of searching it once per identifier. Once a file passes the gate, its parsed copy is dropped. `tools/verify.sh --scale` repeats the measurement and fails if run time grows faster than linear.
-
-## Speed and memory
-
-The pipeline runs on one CPU core, with the standard library only. `tools/scale_check.py` builds larger inputs from scrambled copies of the practice data (each copy with new names and numbers) and from the practice bulk export repeated many times, and measures run time and peak memory (Apple M-series laptop):
-
-| Input | Records | Seconds | Peak memory |
-|---|---:|---:|---:|
-| Practice data (200 files) | 815 | 1.4 | 53 MB |
-| 16 scrambled copies | 13,049 | 21 | 287 MB |
-| 32 scrambled copies | 26,107 | 43 | 540 MB |
-| One 4 MB CSV register | 32,000 | 45 | 647 MB |
-| One 25 MB JSON bulk export | 144,000 | 104 | 1.7 GB |
-
-Run time grows linearly with the input (growth exponent 0.99 to 1.03). Work that compares records with each other is indexed: one-word names are only compared with full names sharing a consonant skeleton, records with identical clues are checked for conflicts once, a JSON record's fields are read from its own subtree, and the release gate reads each output once into an index instead of searching it once per identifier. Once a file passes the gate, its parsed copy is dropped. `tools/verify.sh --scale` repeats the measurement and fails if run time grows faster than linear.
-
-If linking or the privacy plan fails, the run continues: records stay unlinked, or quasi-identifiers are left ungeneralised, but personal data is still removed and the gate still checks every file.
+Run time grows linearly with the input (growth exponent 0.99 to 1.03). Work that compares records with each other is indexed: one-word names are only compared with full names sharing a consonant skeleton, records with identical clues are checked for conflicts once, a JSON record's fields are read from its own subtree, and the release gate reads each output once into an index instead of searching it once per identifier. Once a file passes the gate, its parsed copy is dropped, and marked spans, the most numerous objects, are stored without per-object dictionaries. `tools/verify.sh --scale` repeats the measurement and fails if run time grows faster than linear.
 
 ## How it works
 
@@ -196,7 +182,6 @@ A single file ledger tracks every input file from start to finish, so no file is
 | `tools/verify.sh` | the full check: tests, repeat-run and different-secret runs, secret and temp-file checks, output contract, quality on practice data and leaks on scrambled data (`--submit` adds the organizers' submission check) |
 | `tools/chaos_mutator.py` | builds a scrambled copy of the practice data, to measure how the system does on names, numbers, labels and formats it was not tuned on |
 | `tools/leak_check.py` | counts how many of the values the scrambler inserted survive in an output |
-| `tools/scale_check.py` | times larger inputs and reports run time, peak memory and how run time grows |
 | `tools/scale_check.py` | times larger inputs and reports run time, peak memory and how run time grows |
 | `tools/attacker_lite.py` | our copy of the published attacker (direct exposure, record linkage, profile pooling, targeted attack, pseudonym inversion, cross-release linking), run on practice data |
 | `src/ingest/` | file walk, format detection from content, encoding rules, parsers, depth-proof JSON |
