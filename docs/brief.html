@@ -108,33 +108,33 @@ re-read by a release gate, and the release is measured against a copy of the pub
     quarantined with a reason code; nothing broken is copied out.</li>
   <li><b>Detection (3 scripts).</b> Patterns (Aadhaar, ABHA, PAN, phones with digit checks, emails, record numbers by
     shape), a column profiler that classifies fields by their values with header hints in English, Hindi and Hinglish,
-    and context rules for names: relation markers (S/o, पुत्र), honorifics, labels, postpositions, chat senders and
-    attendants. Text is also read through a normalised view (HTML entities, %-encoding, zero-width characters,
-    look-alike letters) and inside base64 and hex payloads, file names, JSON keys and headers. A <b>clinical shield</b>
-    protects doses, frequencies, durations, doctors, wards, eponyms (Bell's palsy), <code>C/O</code> complaints versus
-    care-of names, and ASHA the job versus Asha the name.</li>
+    and context rules for names (including surname-first and initials): relation markers (S/o, पुत्र), honorifics, labels,
+    postpositions, chat senders and attendants. Text is also read through a normalised view (HTML entities, %-encoding,
+    <code>\uXXXX</code>, zero-width characters, diacritics and look-alike letters) and inside base64 and hex payloads,
+    file names, JSON keys and headers. A <b>clinical shield</b> protects doses, frequencies, durations, doctors, wards,
+    eponyms (Bell's palsy), <code>C/O</code> complaints versus care-of names, and ASHA the job versus Asha the name.</li>
   <li><b>Linkage &amp; pseudonyms.</b> Our own Devanagari-to-Latin transliteration and a phonetic skeleton make
-    <i>राम कुमार</i>, <i>Ram Kumaar</i> and <i>RAMKUMAR</i> comparable. Records link through strong IDs, or through a name
-    plus a second clue (relative, DOB, village and age); gender, DOB, unique-ID and relative conflicts forbid a merge,
-    and a one-word name joins only a unique full-name group. Fake IDs are HMAC-SHA256 over the patient's anchor record
-    with a subkey of <code>RAKSHA_SECRET</code>, placed in the patient's record-number fields.</li>
+    <i>मोहम्मद शाहिद</i>, <i>Mohammad Shahid</i> and <i>Mohd. Shahid</i> comparable. Compound blocking on name + second clue
+    (DOB, relative, village and age) scales linearly without dropping common surnames; gender, DOB, unique-ID and relative
+    conflicts forbid a merge, and a one-word name joins only a unique full-name group. Fake IDs are HMAC-SHA256 over the
+    patient's anchor record with a subkey of <code>RAKSHA_SECRET</code>, placed in the patient's record-number fields.</li>
   <li><b>Privacy layer.</b> Per patient: one secret date shift of 30-180 days (intervals and stays stay exact), one
     age band holding every age seen (10-year, 20-year for small groups, 90+), village to tehsil, 3-digit PIN. Dates of
     birth are withheld (FHIR: the standard <code>data-absent-reason</code> "masked" marker). Look-alike groups below
-    k=5 move to district and wider bands. Diagnoses held by 3 or fewer patients become their ICD-10 chapter, rare
-    procedures are withheld, and high-risk discharges move one extra day. Security is in section 5.</li>
+    k=5 move to district and wider bands. Rare diagnoses (unique on small cohorts, &le;3 patients on large ones) become
+    their ICD-10 chapter, rare procedures are withheld, and high-risk discharges move one extra day. Security is in section 5.</li>
 </ul>
 
 <h2>3. USP</h2>
 <ul>
-  <li><b>It attacks itself.</b> A release gate re-reads every output the way the organizers do (normalised, base64
+  <li><b>It attacks itself.</b> A release gate re-reads every output the way the organizers do (normalised, base64 and hex
     decoded, digits across separators) and refuses it if any of the file's own identifiers survive. Our copy of the
     published attacker drove the policy: it showed a shifted DOB keeps the birth year and re-identified 69% of
-    patients, so DOBs are now withheld (15%).</li>
+    patients, so DOBs are now withheld (23%).</li>
   <li><b>One patient, one treatment, across scripts.</b> Cross-script linking with no wrong merges, and the same
     shift, band and place in every file, so pooling a patient's records gives an attacker nothing new.</li>
   <li><b>Meaning, not word lists.</b> Context rules separate a doctor from a relative with the same first name, a
-    complaint from a care-of name and a disease eponym from a person: 96.6% of medical values survive.</li>
+    complaint from a care-of name and a disease eponym from a person: 99.2% of medical values survive.</li>
 </ul>
 
 <h2>4. Privacy-utility trade-off (measured on the practice data)</h2>
@@ -143,30 +143,30 @@ re-read by a release gate, and the release is measured against a copy of the pub
   <tr><th>Measure</th><th>Result</th></tr>
   <tr><td>Personal data visible (<code>check_dev.py</code>): overall / Hindi / Hinglish</td><td class="n">0.0% / 0.0% / 0.0% of 3,230</td></tr>
   <tr><td>Planted canaries found; broken files copied out</td><td class="n">0 of 4; 0</td></tr>
-  <tr><td>Medical values kept</td><td class="n">96.6%</td></tr>
+  <tr><td>Medical values kept</td><td class="n">99.2%</td></tr>
   <tr><td>Linking precision / recall / F0.5 (wrong merges)</td><td class="n">1.00 / 0.98 / 1.00 (0)</td></tr>
-  <tr><td>Our attacker: patients re-identified from pooled records (raw data 98%)</td><td class="n">15%</td></tr>
+  <tr><td>Our attacker: patients re-identified from pooled records (raw data 98%)</td><td class="n">23%</td></tr>
   <tr><td>Our attacker: record linkage, probability on the true person (raw 92%)</td><td class="n">5%</td></tr>
-  <tr><td>Our attacker: targeted attack with known visit facts (raw 100%)</td><td class="n">57%</td></tr>
+  <tr><td>Our attacker: targeted attack with known visit facts (raw 100%)</td><td class="n">58%</td></tr>
   <tr><td>Fake IDs reversible; fake IDs or dates stable under another secret</td><td class="n">0%; 0%</td></tr>
   <tr><td>Unique in the release on age band, district, admission week, diagnoses</td><td class="n">50 of 57 patients</td></tr>
-  <tr><td>Run time / peak memory: practice set; 16&times; larger set</td><td class="n">1.4 s / 53 MB; 21 s / 273 MB</td></tr>
-  <tr><td><b>Data we did not tune on</b>: new names (both scripts), numbers, IDs, columns, keys, labels, dates</td><td class="n">0 of 809 visible; 0 of 8 canaries</td></tr>
+  <tr><td>Run time / peak memory: practice set; 16&times; larger set</td><td class="n">1.4 s / 49 MB; 22 s / 331 MB</td></tr>
+  <tr><td><b>Data we did not tune on</b> (5 seeds): new names, numbers, IDs, columns, keys, labels, dates</td><td class="n">0% leaked; 0 of 8 canaries</td></tr>
 </table>
 <p><b>What we give up and why.</b> A shifted date of birth keeps the birth year, which pins the age: withholding DOBs
-cut pooled re-identification from 69% to 15%, at the cost of the DOB field's utility credit; 10-year bands cost a little
-precision. Tehsil instead of village and 3-digit PINs keep regional analysis, and per-patient shifts keep every interval
-and stay length exact (high-risk discharges move one day). The only medical values lost (3.4%) are rare diagnoses
-turned into their ICD-10 chapter and rare procedures, which make a patient unique on their own. Common diagnoses are
-kept, so the targeted attack still succeeds against 57%; hiding them would cost far more clinical value than it
+cut pooled re-identification from 69% to 23%, at the cost of the DOB field's utility credit; 10- to 20-year bands cost a
+little precision. Tehsil instead of village and 3-digit PINs keep regional analysis, and per-patient shifts keep every
+interval and stay length exact (high-risk discharges move one day). The only medical values lost (0.8%) are unique rare
+diagnoses turned into their ICD-10 chapter and rare procedures, which single a patient out on their own. Common diagnoses
+are kept, so the targeted attack still succeeds against 58%; hiding them would cost far more clinical value than it
 protects. In a release of 57 patients nearly everyone is unique on the four attributes above, so the realistic measure
 is the attacker's, who must find the person in a register 4-5 times larger.</p>
 
 <h2>5. Security design</h2>
 <ul>
   <li><b>Assume the output is breached.</b> It holds no direct identifiers, no birth dates, no raw record numbers and no
-    original file names (outputs are named <code>doc_&lt;HMAC&gt;</code>). There is deliberately no re-identification
-    vault: nothing reversible exists to steal.</li>
+    PII-bearing file or folder names (renamed to <code>doc_&lt;HMAC&gt;</code> / <code>dir_&lt;HMAC&gt;</code>). There is
+    deliberately no re-identification vault: nothing reversible exists to steal.</li>
   <li><b>Keys.</b> <code>RAKSHA_SECRET</code> lives only in memory; separate HMAC subkeys are derived for fake IDs, date
     shifts, ID tokens and file names. Without it, fake IDs cannot be inverted (unkeyed hashes, encodings and digit cores
     are tested) and two releases cannot be linked.</li>
@@ -180,7 +180,7 @@ is the attacker's, who must find the person in a register 4-5 times larger.</p>
 <ul>
   <li><b>Rules, not models.</b> A name with no context, in no word list and in a format unlike anything seen could be
     missed. The scrambled tests and the gate reduce this risk, they do not remove it.</li>
-  <li><b>Targeted attack (57%)</b> remains high because common diagnoses are kept; our attacker is also weaker than the
+  <li><b>Targeted attack (58%)</b> remains high because common diagnoses are kept; our attacker is also weaker than the
     official one on record linkage and the targeted attack, so those two numbers may understate the real risk.</li>
   <li><b>k=5 cannot be reached</b> on data this small even at district and 20-year bands; rare patients are protected
     by the rare-value rules instead.</li>

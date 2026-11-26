@@ -8,5 +8,5 @@ PROFILE="$(mktemp -d)"
 trap 'rm -rf "$PROFILE"' EXIT
 "$CHROME" --headless --disable-gpu --no-pdf-header-footer --user-data-dir="$PROFILE" \
   --print-to-pdf="$(pwd)/docs/brief.pdf" "file://$(pwd)/docs/brief.html" 2>/dev/null
-pages=$(grep -c "/Type /Page[^s]" docs/brief.pdf || true)
+pages=$(python3 -c 'import re, sys; print(len(re.findall(rb"/Type\s*/Page\b", open(sys.argv[1], "rb").read())))' docs/brief.pdf)
 echo "docs/brief.pdf: $pages pages"

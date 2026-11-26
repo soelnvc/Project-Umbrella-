@@ -4,7 +4,7 @@ An offline, CPU-only, LLM-free privacy firewall for multilingual Indian hospital
 
 It reads a folder of synthetic hospital exports (CSV, TSV, JSON, FHIR R4 Bundles and text notes) and writes a cleaned copy in which personal information is removed, medical values are kept exactly, each patient carries one fake ID across files, and every file's fate is recorded in an honest report.
 
-On the practice data: 0.0% of personal data still visible (in all three languages and every hiding place), 96.6% of medical values kept, patient linking F0.5 of 1.00 with no wrong merges, and 15% of patients re-identifiable by our copy of the published attacker (98% on the raw data). The two-page project brief is [`docs/brief.pdf`](docs/brief.pdf) (source: `docs/brief.html`, rebuilt with `tools/build_brief.sh`).
+On the practice data: 0.0% of personal data still visible (in all three languages and every hiding place), 99.2% of medical values kept, patient linking F0.5 of 1.00 with no wrong merges, and 23% of patients re-identifiable by our copy of the published attacker (98% on the raw data). The two-page project brief is [`docs/brief.pdf`](docs/brief.pdf) (source: `docs/brief.html`, rebuilt with `tools/build_brief.sh`).
 
 ## Setup
 
@@ -26,7 +26,7 @@ The run needs no internet. `RAKSHA_SECRET` keys the fake patient IDs and date sh
 
 | Path | Contents |
 |---|---|
-| `sanitized/` | cleaned files in the same folders and formats as the input; file names become `doc_<HMAC>` so no name or record number survives in them |
+| `sanitized/` | cleaned files in the same folders and formats as the input; file and folder names that hold personal data become `doc_<HMAC>` / `dir_<HMAC>` so no name or record number survives in them |
 | `report.json` | every input file by SHA-256, its status, and true totals |
 | `records.jsonl` | one line per patient record with its fake patient ID |
 
@@ -70,7 +70,7 @@ A captured word must look like a name: capitalised Latin or Devanagari, and not 
 
 ## Hidden places
 
-- **Disguised text:** detection runs on a normalised view (HTML entities and %-encoding decoded, zero-width characters removed, Cyrillic and Greek look-alike letters folded to Latin, NFKC for full-width forms). Each match is mapped back to the exact original characters, so the replacement lands in the original text.
+- **Disguised text:** detection runs on a normalised view (HTML entities, `%-encoding` and `\uXXXX` escapes decoded, zero-width characters removed, Cyrillic and Greek look-alike letters folded to Latin, Latin diacritics stripped, NFKC for full-width and styled forms). Each match is mapped back to the exact original characters, so the replacement lands in the original text.
 - **Encoded payloads:** base64 and hex runs that decode to readable text are cleaned with the same detectors, using the file's own names, and written back in the same encoding (FHIR attachments stay valid base64). Binary payloads such as scanned images are replaced with an encoded `[ATTACHMENT REMOVED]`.
 - **JSON keys:** a key that is a record number becomes the same keyed token the number gets as a value, so references still match; a key that is a name becomes a keyed `NAME-XXXXXXXX` token. Key order and structure are kept.
 - **CSV headers:** identifiers, names after a record number (`JJH-0077112 Zainab`) and listed names are removed.
@@ -95,11 +95,11 @@ On the practice data: precision 1.00, recall 0.98, no two people merged; both sa
 `src/privacy/` decides one treatment per patient and applies it in every record of that patient (a linked patient, or a single unlinked record that holds patient data). Settings are in `config/policy.yaml`.
 
 - **Dates:** each patient gets one shift of 30 to 180 days, earlier or later, from a keyed HMAC (subkey of `RAKSHA_SECRET`). Every date of the patient moves by it, so intervals and stay lengths stay exact, and a different secret gives different shifts. A shifted date never lands on a real birth date written in the same file.
-- **Dates of birth** are withheld (`[DOB]`; in FHIR, the standard `data-absent-reason` "masked" marker in place of `birthDate`). A shifted birth date keeps the birth year, which pins the age far tighter than any band: on the practice data it let our attacker re-identify 69% of patients from pooled records, against 15% with it withheld (`dob_mode` in the policy; `shift` is still available). Each date keeps its own format (order, separators, padding, month names, two-digit years). Day-first or month-first is decided per file; a file whose own dates cannot decide inherits the convention of its source (files sharing a hospital word, hospital name or record-number prefix).
-- **Ages:** one band per patient that holds every age the patient has in any record: 10-year bands, then 10-year offset by five, then 20-year bands for small groups, top-coded at 90+. Ages in age fields, `52 Yrs/F`, `आयु: 39 वर्ष` and `65/F` are all replaced with the same band.
+- **Dates of birth** are withheld (`[DOB]`; in FHIR, the standard `data-absent-reason` "masked" marker in place of `birthDate`). A shifted birth date keeps the birth year, which pins the age far tighter than any band: on the practice data it let our attacker re-identify 69% of patients from pooled records, against 23% with it withheld (`dob_mode` in the policy; `shift` is still available). Each date keeps its own format (order, separators, padding, month names, two-digit years). Day-first or month-first is decided per file; a file whose own dates cannot decide inherits the convention of its source (files sharing a hospital word, hospital name or record-number prefix).
+- **Ages:** one band per patient that holds every age the patient has in any record: 10-year bands, then 20-year bands for small groups (with 5- and 10-year offsets available when a patient's recorded ages straddle a boundary), top-coded at 90+ and clamped at 0 on the low end. Ages in age fields, `52 Yrs/F`, `आयु: 39 वर्ष` and `65/F` are all replaced with the same band.
 - **Place:** village fields become the patient's tehsil (district for escalated patients); village mentions in free text stay `[VILLAGE]`; PIN codes keep three digits.
 - **Look-alike groups:** patients are grouped by gender, age band and place; a group smaller than k (5) is escalated, place first (tehsil to district), then the age band (to 20 years). Escalation stops there: k is counted over the patients in the data, while the attacker's population register is several times larger.
-- **High-risk patients:** a diagnosis or procedure held by three or fewer patients (the attacker's rarity rule), a stay length held by three or fewer patients, or an age of 85+ or 5 or under. Their rare diagnoses become the ICD-10 chapter (code and wording, in every record, including history lines such as `K/C/O addison's disease`); rare procedures become `Procedure (details withheld)`; their discharge dates move by one extra day, so an exact stay length no longer matches.
+- **High-risk patients:** a diagnosis or procedure held by at most the rarity cap (scaled with cohort size: 1 patient on small releases up to 80 patients, 2 up to 160, and 3 above 160, matching the attacker's rarity rule on full datasets), a stay length held by three or fewer patients, or an age of 85+ or 5 or under. Their rare diagnoses become the ICD-10 chapter (code and wording, in every record, including history lines such as `K/C/O addison's disease`); rare procedures become `Procedure (details withheld)`; their discharge dates move by one extra day, so an exact stay length no longer matches.
 
 ## The clinical shield
 
@@ -138,8 +138,8 @@ If linking or the privacy plan fails, the run continues: records stay unlinked, 
 |---|---:|---:|
 | Direct exposure | 100% | 0% |
 | Record linkage (mean probability on the true person) | 92% | 5% |
-| Patients re-identified from pooled records | 98% | 15% |
-| Targeted attack with known facts | 100% | 57% |
+| Patients re-identified from pooled records | 98% | 23% |
+| Targeted attack with known facts | 100% | 58% |
 | Fake IDs reversed | | 0% |
 | Fake IDs or shifted dates stable under another secret | | 0% |
 
@@ -151,13 +151,13 @@ The pipeline runs on one CPU core, with the standard library only. `tools/scale_
 
 | Input | Records | Seconds | Peak memory |
 |---|---:|---:|---:|
-| Practice data (200 files) | 815 | 1.4 | 53 MB |
-| 16 scrambled copies | 13,049 | 21 | 273 MB |
-| 32 scrambled copies | 26,107 | 43 | 510 MB |
+| Practice data (200 files) | 815 | 1.4 | 49 MB |
+| 16 scrambled copies | 13,049 | 22 | 331 MB |
+| 32 scrambled copies | 26,107 | 44 | 540 MB |
 | One 4 MB CSV register | 32,000 | 45 | 647 MB |
 | One 25 MB JSON bulk export | 144,000 | 104 | 1.6 GB |
 
-Run time grows linearly with the input (growth exponent 0.99 to 1.03). Work that compares records with each other is indexed: one-word names are only compared with full names sharing a consonant skeleton, records with identical clues are checked for conflicts once, a JSON record's fields are read from its own subtree, and the release gate reads each output once into an index instead of searching it once per identifier. Once a file passes the gate, its parsed copy is dropped, and marked spans, the most numerous objects, are stored without per-object dictionaries. `tools/verify.sh --scale` repeats the measurement and fails if run time grows faster than linear.
+Run time grows linearly with the input (growth exponent 0.98 to 0.99). Work that compares records with each other is indexed: one-word names are only compared with full names sharing a consonant skeleton, records with identical clues are checked for conflicts once, a JSON record's fields are read from its own subtree, and the release gate reads each output once into an index instead of searching it once per identifier. Once a file passes the gate, its parsed copy is dropped, and marked spans, the most numerous objects, are stored without per-object dictionaries. `tools/verify.sh --scale` repeats the measurement and fails if run time grows faster than linear.
 
 ## How it works
 
@@ -190,7 +190,7 @@ A single file ledger tracks every input file from start to finish, so no file is
 | `src/privacy/` | quasi-identifier mentions, the per-patient privacy plan, ICD-10 chapters |
 | `src/rewrite/` | the span writer, applying spans to fields, writing each file back in its original format |
 | `src/release/` | the release gate: format, shape and FHIR checks, leak check, repair |
-| `config/lexicons/` | name lists, medical word lists (drugs, symptoms, eponyms, clinical terms, Hindi medical words), grammar words, Uttar Pradesh districts |
+| `config/lexicons/` | name lists, medical word lists (drugs, symptoms, eponyms, clinical terms, Hindi medical words), grammar words, Uttar Pradesh and India-wide districts |
 | `config/policy.yaml` | privacy settings |
 | `raksha.toml` | how the organizers set up and run the submission |
 
@@ -215,7 +215,7 @@ None. The system uses rules, word lists and classical matching only.
 ## Known limitations
 
 - **Rules, not models.** A name with no context, in no word list and in a format unlike anything seen before could be missed. The scrambled-data test (0 of 809 inserted values visible) and the release gate reduce this risk; they do not remove it.
-- **Targeted attack.** Our attacker still succeeds against 57% of the people with known visit facts, because common diagnoses are kept on purpose. Our attacker is also weaker than the official one on record linkage and the targeted attack, so those two numbers may understate the real risk.
+- **Targeted attack.** Our attacker still succeeds against 58% of the people with known visit facts, because common diagnoses are kept on purpose. Our attacker is also weaker than the official one on record linkage and the targeted attack, so those two numbers may understate the real risk.
 - **k=5 is not reachable on small data.** All 57 practice patients stay in groups below 5 even at district level and 20-year bands; rare patients are protected by the rare-value rules instead, and 50 of 57 are unique inside the release on age band, district, admission week and diagnoses.
 - **Unsupported formats.** PDF, image and XML files are quarantined, not cleaned.
 - **Very large single files.** A 25 MB JSON export runs in 104 seconds but needs 1.6 GB of memory, because linking and the privacy plan see every record at once.
