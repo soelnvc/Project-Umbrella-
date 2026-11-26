@@ -420,6 +420,6 @@ def entity_counts(parsed: ParsedFile, resolve) -> Counter:
     counts: Counter = Counter()
     for spans in parsed.spans.values():
         for span in resolve(spans):
-            if span.action != "keep":
+            if span.action != "keep" and span.type not in ("QUASI", "ENCODED"):
                 counts[span.type] += 1
     return counts

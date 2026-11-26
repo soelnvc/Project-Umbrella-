@@ -19,6 +19,7 @@ import base64
 import binascii
 import csv
 import datetime as dt
+import hashlib
 import io
 import json
 import random
@@ -554,7 +555,9 @@ def main() -> int:
                     pass
         dest = out / "input" / mutate_path(rel, rep)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(_encode(text, codec))
+        data = _encode(text, codec)
+        dest.write_bytes(data)
+        sha = hashlib.sha256(data).hexdigest()
 
         for u in f["units"].values():
             for e in u["entities"]:
@@ -570,9 +573,15 @@ def main() -> int:
                                               "digits": e.get("key") or re.sub(r"\D", "", surface)}
                 elif e["type"] == "DOB" and surface in res.date_map:
                     new = res.date_map[surface]
-                    inserted[("DOB", new)] = {"kind": "DOB", "script": "latin", "value": new}
+                    entry = inserted.setdefault(("DOB", new), {"kind": "DOB", "script": "latin", "value": new,
+                                                               "files": []})
+                    if sha not in entry["files"]:
+                        entry["files"].append(sha)
 
     values = sorted(inserted.values(), key=lambda x: (x["kind"], x["value"]))
+    for v in values:
+        if "files" in v:
+            v["files"].sort()
     (out / "inserted.json").write_text(json.dumps({"seed": a.seed, "values": values}, ensure_ascii=False,
                                                   indent=1), encoding="utf-8")
     print(f"scrambled {len(truth['files'])} files: {len(latin_map)} Latin and {len(deva_map)} Devanagari "

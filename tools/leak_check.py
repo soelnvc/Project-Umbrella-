@@ -6,12 +6,17 @@
 Text is compared after NFKC normalisation and case folding, with base64 runs decoded, the way
 the organizers' checker reads output. Numbers (phones, Aadhaar, ABHA, record-number digits)
 are matched with separators removed. File names are searched too.
+
+Names and numbers are searched across the whole output. Dates of birth are searched only in
+the output of the file they were inserted into, as the organizers do: shifted dates of other
+patients can land on the same calendar day elsewhere by chance.
 """
 from __future__ import annotations
 
 import argparse
 import base64
 import binascii
+import hashlib
 import json
 import re
 import sys
@@ -53,20 +58,43 @@ def _decode(raw: bytes) -> str:
         return raw.decode("latin-1")
 
 
+def _readable(raw: bytes) -> str:
+    text = _decode(raw)
+    parts = [text]
+    for m in _B64.finditer(text):
+        tok = m.group(0)
+        try:
+            parts.append(base64.b64decode(tok + "=" * (-len(tok) % 4)).decode("utf-8", errors="ignore"))
+        except (binascii.Error, ValueError):
+            pass
+    return "\n".join(parts)
+
+
 def read_all(root: Path) -> str:
     parts = []
     for p in sorted(root.rglob("*")):
         parts.append(p.name)
         if p.is_file():
-            text = _decode(p.read_bytes())
-            for m in _B64.finditer(text):
-                tok = m.group(0)
-                try:
-                    parts.append(base64.b64decode(tok + "=" * (-len(tok) % 4)).decode("utf-8", errors="ignore"))
-                except (binascii.Error, ValueError):
-                    pass
-            parts.append(text)
+            parts.append(_readable(p.read_bytes()))
     return "\n".join(parts)
+
+
+def texts_by_source(out: Path, root: Path) -> dict[str, str]:
+    """Normalised text of each released file, keyed by the SHA-256 of the input it came from
+    (from report.json; a folder without one, such as an input folder, is hashed directly)."""
+    report = out / "report.json"
+    found: dict[str, str] = {}
+    if report.is_file():
+        for f in json.loads(report.read_text(encoding="utf-8")).get("files", []):
+            p = out / f["output"] if f.get("output") else None
+            if p is not None and p.is_file():
+                found[f["input_sha256"]] = norm(_readable(p.read_bytes()))
+    else:
+        for p in root.rglob("*"):
+            if p.is_file():
+                raw = p.read_bytes()
+                found[hashlib.sha256(raw).hexdigest()] = norm(_readable(raw))
+    return found
 
 
 def main() -> int:
@@ -79,6 +107,7 @@ def main() -> int:
     root = out / "sanitized" if (out / "sanitized").is_dir() else out
     text = read_all(root)
     hay = norm(text)
+    per_file = texts_by_source(out, root)
 
     total, leaked, by_script, tot_script = Counter(), Counter(), Counter(), Counter()
     canaries = canary_hits = 0
@@ -93,6 +122,8 @@ def main() -> int:
             hit = digits_pattern(v["digits"]).search(text) is not None
         elif kind in _NAME_KINDS:
             hit = _word_pattern(norm(v["value"])).search(hay) is not None
+        elif v.get("files"):
+            hit = any(norm(v["value"]) in per_file.get(sha, "") for sha in v["files"])
         else:
             hit = norm(v["value"]) in hay
         if v.get("canary"):

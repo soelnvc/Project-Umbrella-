@@ -118,6 +118,17 @@ On the practice data: precision 1.00, recall 0.98, no two people merged; both sa
 
 Protection blocks only name and address spans: phone numbers and other identifiers are removed even inside protected text. A whole field already classified as a patient's name is overridden only by a doctor protection, and after an explicit label (`Name:`) a word-list match can only trim trailing words, so a patient whose name is also a listed word still has the name removed. On the practice data, the shield covers all but two of the 4,383 capitalised or Devanagari words that appear inside medical values.
 
+## The release gate
+
+`src/release/` checks every output file in memory before anything is written:
+
+- **Format:** the output must be valid UTF-8 and parse in its own format, with the same shape as the input: the same CSV rows and cells per row, the same JSON structure and value types (a number becoming an age band is the one allowed change), the same text line count. FHIR bundles must also have known resource types, references that resolve inside the bundle, valid FHIR dates and decodable attachments.
+- **Leaks:** every identifier and full name detected in the file must be gone, read the way the organizers read output: case and spacing ignored, base64 decoded, and numbers matched across spaces, dashes and dots. A name may remain only as often as it appeared inside protected text, such as a doctor who shares a relative's name.
+- **One repair, then quarantine:** leftover plain text is replaced once and the file is checked again. If it still fails, it is quarantined with `leak_check_failed` or `format_check_failed`.
+- **Re-planning:** when a file is quarantined, the remaining files are read again from the input, and linking and the privacy plan are redone without it (at most three rounds, `replan_max_rounds`), so look-alike groups and links describe only what is released.
+
+If linking or the privacy plan fails, the run continues: records stay unlinked, or quasi-identifiers are left ungeneralised, but personal data is still removed and the gate still checks every file.
+
 ## How it works
 
 The pipeline runs in five passes:
@@ -125,7 +136,7 @@ The pipeline runs in five passes:
 1. **Ingest and detect:** every file is hashed, identified from its content, decoded, parsed and split into records. Personal data is marked; medical content is protected.
 2. **Link:** records of the same patient are matched across files, scripts and hospitals, and each patient gets a keyed fake ID.
 3. **Privacy plan:** each patient gets one date shift, one age band and one location level, used in every file they appear in.
-4. **Build and verify:** every output file is built in memory and checked before anything is written.
+4. **Build and verify:** every output file is built in memory and passed through the release gate; if a file is refused, passes 2 to 4 are redone without it.
 5. **Commit:** verified files are written, then the patient list, then the report, after comparing the file ledger with what is on disk.
 
 A single file ledger tracks every input file from start to finish, so no file is silently dropped and the report's counts match what was released.
@@ -146,6 +157,7 @@ A single file ledger tracks every input file from start to finish, so no file is
 | `src/link/` | transliteration, phonetic name keys, date reading, linking clues, clustering, fake IDs and their placement |
 | `src/privacy/` | quasi-identifier mentions, the per-patient privacy plan, ICD-10 chapters |
 | `src/rewrite/` | the span writer, applying spans to fields, writing each file back in its original format |
+| `src/release/` | the release gate: format, shape and FHIR checks, leak check, repair |
 | `config/lexicons/` | name lists, medical word lists (drugs, symptoms, eponyms, clinical terms, Hindi medical words), grammar words, Uttar Pradesh districts |
 | `config/policy.yaml` | privacy settings |
 | `raksha.toml` | how the organizers set up and run the submission |
@@ -154,7 +166,7 @@ A single file ledger tracks every input file from start to finish, so no file is
 
 Hidden evaluation data uses names, labels and formats that never appear in the practice data. `tools/chaos_mutator.py` imitates that: it swaps every patient and relative name for new ones (consistently in Latin and Devanagari, including inside file names, JSON keys, metadata, base64 attachments and escaped text), replaces phone, Aadhaar and other ID numbers with new ones in new formats, gives hospital IDs new prefixes, renames CSV headers, JSON keys and free-text labels into other English, Hinglish and Hindi forms, and changes date formats.
 
-The organizers' practice answer key is only read, to know where the personal values are; no answer key is created or changed. Replacement names are never taken from the practice data or from the pipeline's own name lists (unused names are invented, in both scripts), so the scrambled run measures detection without help from those lists. The scrambler records the values it inserted, and `tools/leak_check.py` counts how many survive in an output, reading text the way the organizers' checker does (normalised, with base64 decoded and numbers matched across separators). `tools/verify.sh` first checks that every inserted value is visible in an untouched copy of the scrambled input, so the leak check is calibrated before it is trusted.
+The organizers' practice answer key is only read, to know where the personal values are; no answer key is created or changed. Replacement names are never taken from the practice data or from the pipeline's own name lists (unused names are invented, in both scripts), so the scrambled run measures detection without help from those lists. The scrambler records the values it inserted, and `tools/leak_check.py` counts how many survive in an output, reading text the way the organizers' checker does (normalised, with base64 decoded and numbers matched across separators). Names and numbers are searched across the whole output; dates of birth only in the file they came from, as the organizers do, because another patient's shifted date can land on the same day elsewhere by chance. `tools/verify.sh` first checks that every inserted value is visible in an untouched copy of the scrambled input, so the leak check is calibrated before it is trusted.
 
 ## Security
 

@@ -104,6 +104,7 @@ def plan(files, record_clues: dict, keys: Keys, policy: dict) -> dict:
     profiles: dict[tuple, Profile] = {}
     record_mentions = {}
     code_texts: dict[str, set[str]] = defaultdict(set)
+    birth_dates: dict[int, set[str]] = defaultdict(set)
     for file_id, sha256, parsed in files:
         conv = clue_mod.file_convention(parsed)
         for record in parsed.records:
@@ -126,6 +127,8 @@ def plan(files, record_clues: dict, keys: Keys, policy: dict) -> dict:
                 per_field.append((address, text, found))
                 parent = address[1][:-1] if address[0] == "json" else address
                 for m in found:
+                    if m.kind == "date" and m.context == "dob":
+                        birth_dates[id(parsed)].add(_date_key(text[m.start:m.end]))
                     if m.kind == "dx_code":
                         by_parent[parent][0].add(m.value.upper())
                     elif m.kind == "dx_text":
@@ -190,7 +193,7 @@ def plan(files, record_clues: dict, keys: Keys, policy: dict) -> dict:
         band = _band(prof.ages, prof.band_step, top)
         for parsed, loc in prof.records:
             changed = _apply(parsed, record_mentions[(id(parsed), loc)], prof, band,
-                             chapters_on, procedures_on, text_chapter)
+                             chapters_on, procedures_on, text_chapter, birth_dates[id(parsed)])
             generalized += changed
     return {"profiles": len(profiles), "records_generalized": generalized,
             "high_risk": sum(p.high_risk for p in profiles.values()), "escalated": escalated,
@@ -258,12 +261,22 @@ def _replace(start: int, end: int, text: str, kind: str = "QUASI") -> Span:
                 source="privacy", priority=70, replacement=text)
 
 
-def _shifted(original: str, conv: str, new: dt.date) -> str:
-    return dates.reformat(original, new, conv)
+def _date_key(s: str) -> str:
+    return " ".join(s.casefold().split())
+
+
+def _shifted(original: str, conv: str, new: dt.date, taken: set[str]) -> str:
+    """The shifted date; a result that would read as a real birth date in the same file moves on a day."""
+    out = dates.reformat(original, new, conv)
+    for extra in range(1, 8):
+        if _date_key(out) not in taken:
+            break
+        out = dates.reformat(original, new + dt.timedelta(days=extra), conv)
+    return out
 
 
 def _apply(parsed, per_field, prof: Profile, band: str | None, chapters_on: bool, procedures_on: bool,
-           text_chapter: dict) -> int:
+           text_chapter: dict, taken: set[str]) -> int:
     conv = clue_mod.file_convention(parsed)
     changed = False
     place = _place_text(prof)
@@ -273,7 +286,8 @@ def _apply(parsed, per_field, prof: Profile, band: str | None, chapters_on: bool
             original = text[m.start:m.end]
             if m.kind == "date":
                 days = prof.shift + (prof.jitter if m.context == "discharge" else 0)
-                spans.append(_replace(m.start, m.end, _shifted(original, conv, m.value + dt.timedelta(days=days))))
+                spans.append(_replace(m.start, m.end,
+                                      _shifted(original, conv, m.value + dt.timedelta(days=days), taken)))
                 changed = True
             elif m.kind == "age" and band:
                 spans.append(_replace(m.start, m.end, band))

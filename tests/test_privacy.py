@@ -9,7 +9,7 @@ from src import pipeline
 from src.link import dates
 from src.privacy import icd
 from src.privacy.mentions import field_mentions
-from src.privacy.planner import _band
+from src.privacy.planner import _band, _shifted
 
 
 @pytest.mark.parametrize("ages,step,band", [
@@ -32,6 +32,12 @@ def test_age_band_holds_every_age(ages, step, band):
 ])
 def test_shifted_dates_keep_their_format(original, conv, expected):
     assert dates.reformat(original, dt.date(2025, 12, 3), conv) == expected
+
+
+def test_shifted_date_never_reads_as_a_birth_date_in_the_same_file():
+    taken = {"03/12/2025", "04/12/2025"}
+    assert _shifted("12/04/1977", "dmy", dt.date(2025, 12, 3), taken) == "05/12/2025"
+    assert _shifted("12/04/1977", "dmy", dt.date(2025, 12, 3), set()) == "03/12/2025"
 
 
 def test_source_convention_decides_ambiguous_files():

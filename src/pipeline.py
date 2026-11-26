@@ -1,4 +1,9 @@
-"""Runs the passes: ingest, (link, privacy plan: later steps), build and verify, commit, report."""
+"""Runs the passes: ingest and detect, link, privacy plan, build and verify, commit, report.
+
+Linking, privacy and building run in rounds: if the release gate quarantines a file, the other
+files are read again and linked and planned without it, so group sizes and links describe only
+what is released (at most `replan_max_rounds` rounds).
+"""
 from __future__ import annotations
 
 import hashlib
@@ -17,6 +22,7 @@ from src.ingest.parsers import ParsedFile, parse
 from src.ingest.walker import walk
 from src.link.assign import link_files
 from src.privacy.planner import plan as plan_privacy
+from src.release import gate
 from src.rewrite.apply import apply
 from src.rewrite.serialize import serialize
 from src.rewrite.spans import resolve
@@ -50,23 +56,56 @@ def _unique(path: str, used: set[str]) -> str:
     return f"{stem}_{n}{dot}{ext}"
 
 
-def _build(parsed: ParsedFile, keys) -> bytes:
-    apply(parsed, keys)
-    return serialize(parsed)
-
-
-def _set_date_conventions(ledger: Ledger, parsed_files: dict) -> None:
+def _set_date_conventions(entries, parsed_files: dict) -> None:
     """Day-first or month-first per file; undecided files inherit their source's convention."""
     from src.link import clues as clue_mod
     from src.link import dates as date_mod
     rows = []
-    for e in ledger.pending():
+    for e in entries:
         parsed = parsed_files[e.file_id]
         texts = clue_mod.file_texts(parsed)
         head = (parsed.text if parsed.fmt == "text" else " ".join(t for t in texts[:40] if isinstance(t, str)))[:600]
         rows.append((e.file_id, e.in_rel, texts, head))
     for file_id, conv in date_mod.conventions(rows).items():
         parsed_files[file_id].date_convention = conv
+
+
+def _original_text(parsed: ParsedFile, address) -> str | None:
+    """A field's text before rewriting (for the gate's leak targets)."""
+    kind = address[0]
+    try:
+        if kind == "cell":
+            return parsed.rows[address[1]][address[2]]
+        if kind == "header":
+            return parsed.header[address[1]]
+        if kind == "json":
+            node = parsed.data
+            for key in address[1]:
+                node = node[key]
+            return node if isinstance(node, str) else str(node)
+        if kind == "jsonkey":
+            return address[2]
+        if kind == "text":
+            return parsed.text
+    except (IndexError, KeyError, TypeError):
+        return None
+    return None
+
+
+def _build_and_check(parsed: ParsedFile, keys) -> tuple[bytes | None, str | None]:
+    """The output bytes, or (None, reason) when the release gate refuses the file."""
+    before = gate.shape(parsed)
+    targets, allowed = gate.leak_targets(parsed, lambda a: _original_text(parsed, a))
+    apply(parsed, keys)
+    data = serialize(parsed)
+    if not gate.check_format(parsed, before, data):
+        return None, "format_check_failed"
+    leaks = gate.find_leaks(data, targets, allowed)
+    if leaks:
+        data = gate.repair(data, leaks)
+        if not gate.check_format(parsed, before, data) or gate.find_leaks(data, targets, allowed):
+            return None, "leak_check_failed"
+    return data, None
 
 
 def run(inp: Path, out: Path) -> int:
@@ -82,10 +121,11 @@ def run(inp: Path, out: Path) -> int:
 
     ledger = Ledger()
     parsed_files: dict[int, ParsedFile] = {}
+    sources: dict[int, Path] = {}
     staged: dict[int, bytes] = {}
     used_paths: set[str] = set()
 
-    # Pass 1: ingest. Files are only read here; nothing is written yet.
+    # Pass 1: ingest and detect. Files are only read here; nothing is written yet.
     for in_rel, path in walk(inp):
         raw = path.read_bytes()
         entry = ledger.discover(in_rel, hashlib.sha256(raw).hexdigest())
@@ -106,35 +146,67 @@ def run(inp: Path, out: Path) -> int:
         entry.out_rel = _unique(out_rel, used_paths)
         used_paths.add(entry.out_rel)
         parsed_files[entry.file_id] = parsed
+        sources[entry.file_id] = path
         ledger.advance(entry, "parsed")
 
-    # Pass 2: link records across files and place each patient's fake ID inside the records.
-    files = [(e.file_id, e.sha256, parsed_files[e.file_id]) for e in ledger.pending()]
-    _set_date_conventions(ledger, parsed_files)
-    record_clues: dict = {}
-    if not watchdog.expired():
-        try:
-            link_summary, record_clues = link_files(files, keys)
-            safety.log("linked", **link_summary)
-        except Exception:  # noqa: BLE001
-            # Linking is an improvement, not a requirement: without it every record stays unlinked.
-            safety.log("link_failed", stream=sys.stderr)
-            for parsed in parsed_files.values():
-                for record in parsed.records:
-                    record.pseudonym = None
+    privacy_summary: dict = {"records_generalized": 0}
+    for round_no in range(max(1, int(policy.get("replan_max_rounds", 3)))):
+        candidates = [e for e in ledger.pending() if e.state in ("parsed", "verified")]
+        if round_no > 0:
+            # Start again from the input so the plan only describes what will be released.
+            for e in candidates:
+                ledger.rewind(e, "parsed")
+                staged.pop(e.file_id, None)
+                ok, parsed = safety.guarded(ledger, e, _read, e.in_rel, sources[e.file_id].read_bytes(), keys)
+                if ok:
+                    for record in parsed.records:
+                        record.file_id = e.file_id
+                    parsed_files[e.file_id] = parsed
+            candidates = [e for e in candidates if e.state == "parsed"]
+        files = [(e.file_id, e.sha256, parsed_files[e.file_id]) for e in candidates]
 
-    # Pass 3: the privacy plan - one date shift, age band and place level per patient.
-    privacy_summary = {"records_generalized": 0}
-    if record_clues:
-        privacy_summary = plan_privacy(files, record_clues, keys, policy)
-        safety.log("privacy", **privacy_summary)
+        # Pass 2: link records across files and place each patient's fake ID inside the records.
+        _set_date_conventions(candidates, parsed_files)
+        record_clues: dict = {}
+        if not watchdog.expired():
+            try:
+                link_summary, record_clues = link_files(files, keys)
+                safety.log("linked", **link_summary)
+            except Exception:  # noqa: BLE001
+                # Linking improves the release but is not required: records stay unlinked.
+                safety.log("link_failed", stream=sys.stderr)
+                record_clues = {}
+                for _, _, parsed in files:
+                    for record in parsed.records:
+                        record.pseudonym = None
 
-    # Pass 4: build each output in memory. The release gate (Step 12) will check it here.
-    for entry in ledger.pending():
-        ok, data = safety.guarded(ledger, entry, _build, parsed_files[entry.file_id], keys)
-        if ok:
-            staged[entry.file_id] = data
-            ledger.advance(entry, "verified")
+        # Pass 3: the privacy plan - one date shift, age band and place level per patient.
+        privacy_summary = {"records_generalized": 0}
+        if record_clues:
+            try:
+                privacy_summary = plan_privacy(files, record_clues, keys, policy)
+                safety.log("privacy", **privacy_summary)
+            except Exception:  # noqa: BLE001
+                # Personal data is still removed; only the quasi-identifier generalisation is missing.
+                safety.log("privacy_failed", stream=sys.stderr)
+
+        # Pass 4: build every output in memory and pass it through the release gate.
+        refused = 0
+        for e in candidates:
+            ok, result = safety.guarded(ledger, e, _build_and_check, parsed_files[e.file_id], keys)
+            if not ok:
+                refused += 1
+                continue
+            data, reason = result
+            if data is None:
+                ledger.quarantine(e, reason)
+                refused += 1
+                continue
+            staged[e.file_id] = data
+            ledger.advance(e, "verified")
+        safety.log("gate", round=round_no + 1, refused=refused)
+        if not refused or watchdog.expired():
+            break
 
     # Pass 5: commit verified files, then records, then reconcile, then the report.
     san = out / "sanitized"

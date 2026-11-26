@@ -34,6 +34,12 @@ class Ledger:
             raise ValueError("ledger state cannot move backwards")
         entry.state = state
 
+    def rewind(self, entry: FileEntry, state: str) -> None:
+        """Move a file back to an earlier state for a re-planning round (never out of quarantine)."""
+        if entry.state in ("quarantined", "suppressed", "released"):
+            return
+        entry.state = state
+
     def quarantine(self, entry: FileEntry, reason: str) -> None:
         entry.state = "quarantined"
         entry.reason = reason if reason in REASONS else "processing_error"
