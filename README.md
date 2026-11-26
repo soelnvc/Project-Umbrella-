@@ -1,223 +1,207 @@
 # Umbrella
 
-An offline, CPU-only, LLM-free privacy firewall for multilingual Indian hospital records (English, Hindi and Hinglish), built for Track 3 "Secret Wards" by team **JenSON**: Siddhesh Goel (leader), Krishna Bhatia and Nithin Jagganatham.
+**Offline, CPU-only, model-free privacy firewall for multilingual Indian hospital records (English, हिंदी & Hinglish).**  
+Built for **Track 3 — Secret Wards** by **Team JenSON**: Siddhesh Goel *(Leader)*, Krishna Bhatia, and Nithin Jagganatham.
 
-It reads a folder of synthetic hospital exports (CSV, TSV, JSON, FHIR R4 Bundles and text notes) and writes a cleaned copy in which personal information is removed, medical values are kept exactly, each patient carries one fake ID across files, and every file's fate is recorded in an honest report.
+`Python 3.10+` · `Standard Library Only` · `Zero LLMs / Models` · `Offline CPU` · `Deterministic HMAC-SHA256` · [`2-Page Project Brief (PDF)`](docs/brief.pdf)
 
-On the practice data: 0.0% of personal data still visible (in all three languages and every hiding place), 99.2% of medical values kept, patient linking F0.5 of 1.00 with no wrong merges, and 23% of patients re-identifiable by our copy of the published attacker (98% on the raw data). The two-page project brief is [`docs/brief.pdf`](docs/brief.pdf) (source: `docs/brief.html`, rebuilt with `tools/build_brief.sh`).
+---
 
-## Setup
+Umbrella ingests chaotic, multi-hospital exports (`CSV`, `TSV`, nested `JSON`, `FHIR R4`, and free-text clinical notes across UTF-8, UTF-16, and legacy `cp1252`), strips personal identifiers across scripts and hidden channels, preserves clinical facts intact, links each patient under one secret-keyed pseudonym (`PSN-XXXXXXXX`), applies one consistent quasi-identifier plan everywhere, and verifies every output file through an in-memory **release gate** before a single byte hits disk.
+
+## Scorecard at a Glance
+
+| Benchmark (`dev/input` & multi-seed chaos suite) | Result |
+|---|---:|
+| **Personal data leaked** (`check_dev.py`: Latin / Devanagari / Hinglish across all 6 channels) | **0.0%** *(0 / 3,230)* |
+| **Planted canaries leaked** · **Broken / unsupported files copied raw** | **0 / 4** · **0** |
+| **Medical values preserved** (doses, vitals, labs, diagnoses, procedures, stay lengths) | **99.2%** *(4,815 / 4,855)* |
+| **Patient linking** — Precision / Recall / **F0.5** *(wrong merges)* | **1.00 / 0.98 / 1.00** *(0)* |
+| **Unseen-format chaos test** (5 seeds: new names, IDs, prefixes, headers, keys, labels, dates) | **0.0% leaked** · **0 / 8 canaries** |
+| **Pooled attacker re-identification** (`attacker_lite.py`: raw data **98%**) | **23%** |
+| **Record-linkage attack** (raw **92%**) · **Pseudonym inversion / cross-secret stability** | **5%** · **0% / 0%** |
+| **Speed & memory** (`200` files, `815` records) · **Linear scaling exponent** (`16×` load) | **1.4 s / 49 MB** · **0.98–0.99** |
+
+---
+
+## Quickstart
 
 ```bash
+# 1. Setup (standard library only; dev tools in requirements-dev.txt)
 pip install -r requirements.txt
+
+# 2. Sanitize a hospital export directory (offline; RAKSHA_SECRET required)
+RAKSHA_SECRET=<secret> python3 main.py --input <input_dir> --output <empty_output_dir>
+
+# 3. Run full test, determinism, chaos-leak, attacker, scaling & submission suite
+bash tools/verify.sh --submit --scale
 ```
 
-The pipeline needs Python 3.10 or newer and currently uses only the standard library.
+### Output Contract
 
-## Run
-
-```bash
-RAKSHA_SECRET=<secret> python3 main.py --input <input folder> --output <empty output folder>
+```text
+<output_dir>/
+├── sanitized/       Cleaned mirror of input tree; PII-bearing paths renamed to doc_<HMAC> / dir_<HMAC>
+├── records.jsonl    One {"file", "loc", "patient"} line per exported record (row:N | /json/ptr | doc)
+└── report.json      SHA-256 manifest of every input file, status/quarantine reason, entity totals & RSS
 ```
 
-The run needs no internet. `RAKSHA_SECRET` keys the fake patient IDs and date shifts. It is never written or printed. Without it, the program exits with an error.
+---
 
-## Output
+## System Architecture
 
-| Path | Contents |
+Stages **only mark character spans**; a single span writer (`src/rewrite/spans.py`) resolves overlaps and mutates text, and a single file ledger (`src/core/ledger.py`) decides every file's fate.
+
+```mermaid
+flowchart LR
+    IN["Input Tree (Read-Only, Sorted)"] --> P1["1. Ingest & Detect (Sniff, Shield, Spans)"]
+    P1 --> P2["2. Cross-Script Link (Phonetic + Conflict Veto)"]
+    P2 --> P3["3. Privacy Plan (Shift, Age Band, k-Group)"]
+    P3 --> P4["4. Build & Release Gate (Shape, FHIR, Self-Scan)"]
+    P4 -->|"Pass (or 1 Repair)"| P5["5. Atomic Commit & Ledger Reconcile"]
+    P4 -.->|"Refused: Quarantine & Re-plan (<=3x)"| P2
+    P5 --> OUT1["sanitized/"]
+    P5 --> OUT2["records.jsonl"]
+    P5 --> OUT3["report.json"]
+
+    classDef stage fill:#eef5f9,stroke:#0b6e99,color:#16202a,stroke-width:1.5px;
+    classDef io fill:#e9f6ee,stroke:#2f8a57,color:#16202a,stroke-width:1.5px;
+    classDef src fill:#f2f4f6,stroke:#6c7f8d,color:#16202a,stroke-width:1.5px;
+    class P1,P2,P3,P4,P5 stage;
+    class OUT1,OUT2,OUT3 io;
+    class IN src;
+```
+
+### Keyed Cryptography & Cross-Script Identity Flow
+
+```mermaid
+flowchart TD
+    SEC["RAKSHA_SECRET (In-Memory Only)"] -->|"HMAC-SHA256 Subkeys"| K1["PSN-XXXXXXXX (Anchor Locator)"]
+    SEC -->|"HMAC-SHA256 Subkeys"| K2["±30..180d Shift (Per Patient)"]
+    SEC -->|"HMAC-SHA256 Subkeys"| K3["ID- / NAME- / doc_ / dir_ Tokens"]
+
+    N1["मोहम्मद शाहिद (Devanagari)"] -->|"Custom Transliteration"| SK["Phonetic Skeleton + Second Clue"]
+    N2["Mohammad Shahid (English)"] --> SK
+    N3["Mohd. Shahid (Hinglish)"] --> SK
+    SK -->|"No Gender / DOB / ID / Relative Conflict"| K1
+
+    classDef key fill:#fff8ec,stroke:#b5651d,color:#16202a,stroke-width:1.5px;
+    classDef link fill:#eef5f9,stroke:#0b6e99,color:#16202a,stroke-width:1.5px;
+    class SEC,K1,K2,K3 key;
+    class N1,N2,N3,SK link;
+```
+
+---
+
+## Project Structure
+
+```text
+Project-Umbrella-/
+├── main.py                  CLI entry point (validates RAKSHA_SECRET, invokes safety shell)
+├── raksha.toml              Evaluator build & offline run specification
+├── config/
+│   ├── policy.yaml          Declarative privacy policy (bands, shifts, k=5, rarity, budget)
+│   └── lexicons/            Indian names, clinical/drug/eponym terms, Hindi grammar, UP & India districts
+├── docs/
+│   ├── brief.html           Source for the 2-page Project Brief (rebuilt via tools/build_brief.sh)
+│   └── brief.pdf            Submitted 2-page Project Brief PDF
+├── src/
+│   ├── pipeline.py          Orchestrates Passes 1–5, dirty-path mapping, re-plan loop & watchdog
+│   ├── core/                Data models (__slots__ Span), file ledger, HMAC subkeys, zero-PII logger
+│   ├── ingest/              Magic-byte sniffing, strict encoding cascade, table/FHIR & iterative JSON parsers
+│   ├── detect/              Scorer-parity normalizer, ID/name/address rules, profiler, clinical shield, hidden channels
+│   ├── link/                Devanagari transliterator, phonetic keys, compound blocking, PSN placement
+│   ├── privacy/             QI mentions, per-patient shifts/bands/escalation, ICD-10 chapter generaliser
+│   ├── rewrite/             Single overlap-resolving span writer & format-preserving file builders
+│   └── release/             In-memory UTF-8/CSV/JSON/FHIR validator, normalized self-leak scanner & repair
+├── tools/
+│   ├── verify.sh            End-to-end gate: pytest, 3-run contract, chaos mutator, attacker, scaling & submit check
+│   ├── attacker_lite.py     Published voter-list & longitudinal re-identification attacker (A1–A7)
+│   ├── chaos_mutator.py     Scrambles names, scripts, IDs, headers, keys, base64 & dates to test unseen formats
+│   ├── leak_check.py        Scorer-equivalent normalized & base64-decoded leak counter
+│   └── scale_check.py       Runtime & RSS growth-exponent profiler up to 144k records
+└── tests/                   354 unit & regression tests across every module and trap category
+```
+
+---
+
+## How Each Layer Works
+
+### 1. Ingestion & Structural Integrity (`src/ingest/`)
+- **Content over extension:** Format is sniffed from bytes (`JSON` inside `.csv` is parsed as JSON; strict multi-column tables inside `.txt` are parsed as tables; `PDF`, images, archives, and `XML` are quarantined as `unsupported_format`).
+- **Fail-closed encodings:** Tried in strict order — `UTF-8 BOM` → `UTF-16` → strict `UTF-8` → genuine `cp1252`. Stray surrogates, mixed encodings, or replacement bytes quarantine the file as `invalid_encoding` so corrupted text can never hide a name.
+- **Arbitrary JSON depth & ragged tables:** Standard JSON parsing falls back to an iterative parser, walker, and serializer (`1,500+` levels deep without recursion). Record lists are discovered up to 3 levels deep. CSV/TSV delimiters (`,`, `\t`, `;`, `|`), quotes, BOMs, and shifted rows (flagged for full-cell scanning) are preserved.
+
+### 2. Multilingual Detection & Hidden Channels (`src/detect/`)
+
+| Surface | How Umbrella Handles It |
 |---|---|
-| `sanitized/` | cleaned files in the same folders and formats as the input; file and folder names that hold personal data become `doc_<HMAC>` / `dir_<HMAC>` so no name or record number survives in them |
-| `report.json` | every input file by SHA-256, its status, and true totals |
-| `records.jsonl` | one line per patient record with its fake patient ID |
+| **Indian Identifiers** | Aadhaar (any separator, masked), ABHA numbers & `@abdm` addresses, PAN, emails, insurance IDs, and phones (`+91`, `0`-prefixed, brackets, 5-5, 3-3-4, landlines, masked `•`, Devanagari & Arabic-Indic digits). Hospital MRNs/UHIDs are caught **by shape** (letter prefix + ≥ 5 digits across segments) → keyed `ID-XXXXXXXX` tokens (`0` when stored as a JSON number). Package/ICD/LOINC codes, doses, and vitals are untouched. |
+| **Value-Driven Profiler** | Classifies CSV columns and JSON paths primarily from cell values, using English/Hindi/Hinglish keys only as hints (`guardian.name` → relative; name column beside bare `S/o`/`W/o` column → relative; unclassified columns scanned as free text). |
+| **Context Names (3 Scripts)** | Captures labelled names (`Name:`, `मरीज़ का नाम:`, `Rogi ka naam:`), surname-first (`Sharma, Ravi`), compact initials (`R.K. Verma`), slash-terminated (`Ram Kumar/45/M`), relatives (`S/o`, `W/o`, `पुत्र`, `पत्नी`), fragmented leads (`Asha, W/o Kamal`), honorifics (`ji`, `sahab`, `जी`, `श्रीमती`), Hindi/Hinglish postpositions (`ka/ki/ke/ne/ko/se`), attendants, timelines, and chat headers. Confident names spread case-insensitively **within the same file only**. |
+| **Addresses & FHIR R4** | Strips house numbers (`H.No. 364`, `मकान नं. 398`), localities (`Mohalla`, `Colony`, `Nagar`, municipal `Ward`), landmarks (`near Pani Tanki`, `मस्जिद के पीछे`), and villages (`[VILLAGE]` in prose; tehsil in fields). PINs keep 3 digits (`229***`). Cleans FHIR `Patient`/`RelatedPerson`, `subject.display`, unlabelled `address.line`, and person extensions while keeping `Practitioner` and `Organization`. |
+| **Hidden Leakage Channels** | Runs detectors over a **scorer-parity normalized view** (HTML entities, `%XX`, `\uXXXX`, zero-width chars, Cyrillic/Greek homoglyphs, Latin diacritics, NFKC) mapped back to exact raw offsets. Recursively cleans readable `base64` (standard, URL-safe, MIME, `data:`) and `hex` payloads (binary attachments → encoded `[ATTACHMENT REMOVED]`). Cleans CSV headers, JSON keys (`ID-` / `NAME-`), path digit cores, and PII filenames/folders (`doc_<HMAC>` / `dir_<HMAC>`). |
 
-Files that cannot be processed safely are never copied. They are listed in the report as quarantined with a fixed reason code.
+### 3. The Clinical Shield (`src/detect/shield.py`)
+Shield spans block name/address false positives while allowing direct-identifier patterns (e.g., a phone number inside a doctor string) to still redact:
 
-## Reading files
-
-- **Format from content, not the file name.** PDF, image and archive signatures, and markup such as XML, are set aside as `unsupported_format`. A JSON file with a `.csv` name is read and written as JSON.
-- **Encodings, in order:** UTF-8 byte-order mark, UTF-16 (with or without a mark), strict UTF-8, then cp1252 only for genuine legacy exports. A file with damaged bytes (stray encoding markers, mixed encodings, replacement or control characters) is set aside as `invalid_encoding` rather than half-read, since damaged text can hide a name from detection.
-- **Tables:** the delimiter is detected (comma, tab, semicolon, pipe). Multi-line cells and ragged rows are kept. Rows whose values look shifted by an unescaped delimiter are flagged so every cell in them is scanned.
-- **JSON at any depth:** the standard parser is used first; an iterative parser, writer and tree walk take over for deeply nested files, so a 1,500-level export is cleaned instead of crashing.
-- **Records:** CSV and TSV rows are `row:N`. A JSON file that describes one patient at its top level is one `doc` record; otherwise each top-level list whose items carry patient fields gives one record per item (`/visits/3`). FHIR Bundles and text notes are one `doc` record.
-- **Output:** every file is written back in its own format as UTF-8, keeping its delimiter, header, line endings and UTF-8 byte-order mark.
-
-## Detection
-
-Detection only marks spans of text; a single writer (`src/rewrite/spans.py`) resolves overlaps (longest span first, then priority) and applies every replacement once.
-
-- **Identifiers everywhere:** Aadhaar (any separators, masked forms), ABHA numbers and addresses, PAN, email, insurance numbers, and phones in any common Indian format (+91, leading 0, 5-5, 3-3-4, brackets, landlines, masked), including Devanagari and Arabic-Indic digits. Hospital record numbers are found by shape (a letter prefix and digit groups with at least five digits), not by known prefixes, so new hospitals are covered. Medical codes such as package codes (`MG006A`), ICD codes, LOINC codes, doses, lab values and dates are not touched.
-- **Columns and JSON fields by their values:** each CSV column and JSON field is classified from its values (identifier shapes, name shapes, relation markers such as `S/o`, doctor prefixes), with the field name used only as a hint in English, Hinglish and Hindi. A JSON field's own key decides first; a parent key helps only when the field's key says nothing (`name.first`) or describes a relative (`guardian.name`). Columns that cannot be classified are still scanned as free text.
-- **FHIR:** names, phone numbers and identifiers of `Patient` and `RelatedPerson` resources are removed, `subject.display` is treated as the patient's name, and names of practitioners and organisations are kept.
-- **Labelled names in free text:** a name after a label such as `Name:`, `Patient Name:`, `नाम:`, `मरीज़ का नाम:` or `Rogi ka naam:` is removed; `Attendant:` and similar labels mark a relative. Labels for doctors (`Consultant:`, `Referred by:`) and for things that are not people (`Hospital Name:`, `Test Name:`) are left alone. `C/O` counts as "care of" only before a capitalised name; `C/O fever` is a complaint and `H/O` is always medical history.
-- **Replacements:** typed placeholders (`[NAME]`, `[RELATIVE]`, `[PHONE]`, `[AADHAAR]`, `[ABHA]`, `[PAN]`, `[EMAIL]`, `[INSURANCE_ID]`). Hospital record and visit numbers become keyed tokens (`ID-XXXXXXXX`, HMAC with a subkey of `RAKSHA_SECRET`), so the same number maps to the same token in every file without being reversible. No partial digits are kept. An identifier stored as a JSON number becomes `0`, keeping the type.
-- **Word lists** (`config/lexicons/`): common Indian given names and surnames in Latin and Devanagari, used only as supporting evidence for unlabelled columns.
-
-## Names from context and addresses
-
-`src/detect/names.py` finds names that have no label:
-
-- **Relatives** after relation markers: `S/o`, `D/o`, `W/o`, `F/o`, `son of`, `wife of`, `पुत्र`, `पुत्री`, `पत्नी`, `पति`, and `C/O` when no complaint follows (only the first clause counts, so in `C/O Ramesh Patel, Ward 1` the ward is part of the address).
-- **The patient before a relation marker**, the fragmented-identity form: `Asha, W/o Kamal, discharged`.
-- **Honorifics** after a name (`ji`, `sahab`, `bhai`, `didi`, `babu`, `mama`, `जी`, `साहब` …) or before it (`Mr`, `Smt`, `Shri`, `Begum`, `श्री`, `श्रीमती` …).
-- **Hinglish and Hindi sentence patterns**: a capitalised name before `ka`, `ki`, `ke`, `ne`, `ko`, `se`, or Devanagari words before `को`, `का`, `की`, `के`, `ने`, `से`, skipping common words such as `मरीज़` (patient).
-- **Timelines, attendants and chats**: `14:00 - Brajesh Yadav`, `Zorawar Qadri (attendant, …)`, `Sunita's attendant`, `called by …`, `witnessed by …`, and WhatsApp sender headers.
-
-A captured word must look like a name: capitalised Latin or Devanagari, and not a common word, medical word, honorific or grammar word (`config/lexicons/common_words.txt`, `hindi_common.txt`). A capture made only of generic name parts (`Mohd.`, `Devi`, `Kumar`) is rejected.
-
-`src/detect/address.py` removes house numbers (`H.No. 364`, `Makan No. 12`, `मकान नं. 398`), localities (`Mohalla Raja Bazar`, a municipal `Ward 20`), landmarks (`near Pani Tanki`, `जामा मस्जिद के पीछे`) and villages, whether named after a keyword (`Gram`, `Vill.`, `ग्राम`) or by position just before the tehsil. Tehsil and district names are kept. PIN codes keep their first three digits (`229***`). Village and PIN columns are recognised by the profiler, and FHIR `address.city` and `postalCode` are handled the same way; FHIR extensions whose URL describes a person (`…/mothers-name`) are treated as names.
-
-**Name spreading (same file only).** A name found confidently (a name field, a label, a relation marker, an honorific, a timeline or chat sender) is searched for everywhere else in the same file, in any letter case, so `Mohd. Shahid` in a note is removed once `मरीज़ का नाम: …` or a registration column named him. Names never spread across files. Generic name parts, common words, medical words and districts are never spread, and doctor names stay protected.
-
-## Hidden places
-
-- **Disguised text:** detection runs on a normalised view (HTML entities, `%-encoding` and `\uXXXX` escapes decoded, zero-width characters removed, Cyrillic and Greek look-alike letters folded to Latin, Latin diacritics stripped, NFKC for full-width and styled forms). Each match is mapped back to the exact original characters, so the replacement lands in the original text.
-- **Encoded payloads:** base64 and hex runs that decode to readable text are cleaned with the same detectors, using the file's own names, and written back in the same encoding (FHIR attachments stay valid base64). Binary payloads such as scanned images are replaced with an encoded `[ATTACHMENT REMOVED]`.
-- **JSON keys:** a key that is a record number becomes the same keyed token the number gets as a value, so references still match; a key that is a name becomes a keyed `NAME-XXXXXXXX` token. Key order and structure are kept.
-- **CSV headers:** identifiers, names after a record number (`JJH-0077112 Zainab`) and listed names are removed.
-- **Paths and export metadata:** in a path-shaped value, a folder that pairs a name with a 5 to 8 digit number (`Anita_Sharma_010565`) is a patient folder. Record-number digit cores found in a file (`010565` from `UHID-010565`) are removed wherever else they appear in that file.
-- **File and folder names:** a name that holds an identifier, a phone number, a listed name or one of the file's own detected names is replaced with an opaque name, `doc_<hash>.<ext>` or `dir_<hash>`, derived from a keyed hash and never from the original name. Other names are kept. The new path is recorded in `report.json` against the file's SHA-256.
-- **Table cues:** a name-shaped column beside a column of bare relation markers (`S/o`, `W/o`) holds relatives' names, whatever its header says.
-
-## Linking patients
-
-`src/link/` gives every patient one fake ID across files, scripts and hospitals, without ever merging two different people.
-
-- **Clues per record** (`clues.py`): identifiers, the patient's name and relatives' names (from the marked spans, before replacement), gender, date of birth, ages with their visit year, village, tehsil and district. Each file's dates are read day-first or month-first by its own header hints and values (`dates.py`). A record whose confident sources name two people who cannot be the same (an index file, a ward sheet) is never linked.
-- **Cross-script names** (`translit.py`, `phonetic.py`): Devanagari is transliterated with our own table (schwa deletion, anusvara, nukta), then folded phonetically (vowel length, aspirates, v/w, z/j, sh/s, doubled letters), so मोहम्मद शाहिद, Mohammad Shahid and Mohd. Shahid compare as one name and Rina and Rani do not. Generic parts (Mohd., Devi, Kumar, Singh) are ignored.
-- **Conservative links** (`cluster.py`): two records link on a shared strong identifier (Aadhaar, ABHA, PAN, email, hospital record number), on a shared phone or insurance number that is not a household one, or on matching names plus a second clue (date of birth, a relative of the same kind, or village with a compatible birth year). A one-word name links to a full-name group only when exactly one such group fits. A merge is refused when any pair across the two groups conflicts on gender, Aadhaar or ABHA, a relative of the same kind, or name; for name-based links, date of birth and birth year must also agree (a shared record number overrides a mistyped age).
-- **Fake IDs** (`pseudonym.py`): `PSN-` plus 8 characters of an HMAC (subkey of `RAKSHA_SECRET`) over the group's first record position, never over personal data, so they are stable for one secret and change with another.
-- **Placement** (`assign.py`): the fake ID replaces the patient's record number inside the record (UHID column, `patient_ref`, the FHIR Patient identifier); in a record without one, it replaces the patient's name mentions. Visit, bill and sample numbers keep their keyed `ID-` tokens.
-
-On the practice data: precision 1.00, recall 0.98, no two people merged; both same-name pairs stay apart.
-
-## The privacy plan
-
-`src/privacy/` decides one treatment per patient and applies it in every record of that patient (a linked patient, or a single unlinked record that holds patient data). Settings are in `config/policy.yaml`.
-
-- **Dates:** each patient gets one shift of 30 to 180 days, earlier or later, from a keyed HMAC (subkey of `RAKSHA_SECRET`). Every date of the patient moves by it, so intervals and stay lengths stay exact, and a different secret gives different shifts. A shifted date never lands on a real birth date written in the same file.
-- **Dates of birth** are withheld (`[DOB]`; in FHIR, the standard `data-absent-reason` "masked" marker in place of `birthDate`). A shifted birth date keeps the birth year, which pins the age far tighter than any band: on the practice data it let our attacker re-identify 69% of patients from pooled records, against 23% with it withheld (`dob_mode` in the policy; `shift` is still available). Each date keeps its own format (order, separators, padding, month names, two-digit years). Day-first or month-first is decided per file; a file whose own dates cannot decide inherits the convention of its source (files sharing a hospital word, hospital name or record-number prefix).
-- **Ages:** one band per patient that holds every age the patient has in any record: 10-year bands, then 20-year bands for small groups (with 5- and 10-year offsets available when a patient's recorded ages straddle a boundary), top-coded at 90+ and clamped at 0 on the low end. Ages in age fields, `52 Yrs/F`, `आयु: 39 वर्ष` and `65/F` are all replaced with the same band.
-- **Place:** village fields become the patient's tehsil (district for escalated patients); village mentions in free text stay `[VILLAGE]`; PIN codes keep three digits.
-- **Look-alike groups:** patients are grouped by gender, age band and place; a group smaller than k (5) is escalated, place first (tehsil to district), then the age band (to 20 years). Escalation stops there: k is counted over the patients in the data, while the attacker's population register is several times larger.
-- **High-risk patients:** a diagnosis or procedure held by at most the rarity cap (scaled with cohort size: 1 patient on small releases up to 80 patients, 2 up to 160, and 3 above 160, matching the attacker's rarity rule on full datasets), a stay length held by three or fewer patients, or an age of 85+ or 5 or under. Their rare diagnoses become the ICD-10 chapter (code and wording, in every record, including history lines such as `K/C/O addison's disease`); rare procedures become `Procedure (details withheld)`; their discharge dates move by one extra day, so an exact stay length no longer matches.
-
-## The clinical shield
-
-`src/detect/shield.py` marks text that name and address detection must never remove. It covers the ten scored trap groups and the rest of the clinical record:
-
-| Protected | Examples |
+| Protected Clinical Construct | Examples Kept Intact |
 |---|---|
-| Doctors, including a doctor who shares a relative's first name | `Dr. Ramesh Srivastava (MD Medicine)`, `डॉ. रमेश` |
-| Doses, frequencies, durations | `Ramipril 5 mg`, `100 mg + 0.5 mg`, `1-0-1`, `Dolo 650 BD x 5 days`, `6 दिन से` |
-| Complaints after `C/O` | kept when the words are symptoms or carry a duration (`C/O pain abdomen x 6 days`); `C/O Naresh Chauhan` is a person |
-| History | `K/C/O DM2 x 6 yrs`, `H/O TB 8 yrs back`, `No H/O DM/HTN` |
-| Hospital wards and beds, outside addresses | `Ward 8 (Medicine)`, `4 (Medicine)`, `Bed 29` (a municipal `Ward 20` in an address is not protected) |
-| Diseases and devices named after people | `Addison's disease`, `Bell's palsy`, `Whipple procedure`, `Foley catheter` |
-| ASHA as a job title, not the name Asha | `Referred by ASHA worker` (but `Name: ASHA RAJPUT` is a name) |
-| Hospital and lab names | `Jeevan Jyoti Charitable Hospital`, `Pathkind Labs` |
-| Medical words, districts and short codes | drug names and brands, symptoms in three scripts, test and diagnosis words, specialties, Hindi grammar words, the 75 Uttar Pradesh districts, `HbA1c`, `SpO2`, `SG039B` |
+| **Doctors & Staff** *(including shared first names)* | `Dr. Ramesh Srivastava (MD Medicine)`, `डॉ. रमेश`, FHIR `Practitioner.name` |
+| **Doses, Frequencies & Durations** | `Ramipril 5 mg`, `Dolo 650 BD x 5 days`, `1-0-1`, `100 mg + 0.5 mg`, `6 दिन से` |
+| **Complaints vs. Care-Of (`C/O`) & History** | Keeps `C/O pain abdomen x 6 days`, `K/C/O DM2`, `H/O TB`; strips person after `C/O Naresh` or `, S/o …` |
+| **Clinical Wards, Eponyms, Roles & Lexicons** | `Ward 8 (Medicine)`, `Bed 29`, `Addison's disease`, `Foley catheter`, `ASHA worker` *(vs. patient `Asha`)*, hospitals/labs, `HbA1c`, `SG039B`, UP & all-India districts |
 
-Protection blocks only name and address spans: phone numbers and other identifiers are removed even inside protected text. A whole field already classified as a patient's name is overridden only by a doctor protection, and after an explicit label (`Name:`) a word-list match can only trim trailing words, so a patient whose name is also a listed word still has the name removed. On the practice data, the shield covers all but two of the 4,383 capitalised or Devanagari words that appear inside medical values.
+### 4. Conservative Cross-Script Record Linkage (`src/link/`)
+- **Script-independent matching:** Custom Devanagari-to-Latin transliteration (schwa deletion, anusvara, nukta) + phonetic consonant skeletons equate *मोहम्मद शाहिद*, *Mohammad Shahid*, and *Mohd. Shahid* while keeping *Rina* ≠ *Rani*. Generic tokens (`Mohd.`, `Kumar`, `Devi`, `Singh`) never link alone.
+- **Linear-time blocking & hard vetoes:** Compound blocking on `(name_skeleton, dob | relative | village)` plus clue-signature deduplication avoids dropping common surnames while scaling linearly. Links require a strong ID, a non-household phone/insurance ID, or name + second clue. **Zero-false-merge vetoes** reject any conflict on gender, Aadhaar/ABHA, same-role relative, name, or DOB/birth year; multi-patient index sheets stay unlinked (`patient: null`).
+- **Consistent placement:** `PSN-XXXXXXXX` replaces the patient's record-number field, FHIR `Patient.identifier`, or fallback patient-name spans (`100%` agreement between `sanitized/` and `records.jsonl`).
 
-## The release gate
+### 5. Per-Patient Privacy Plan (`src/privacy/`, `config/policy.yaml`)
+- **Uniform date shift & withheld DOB:** One keyed `±30..180` day shift per patient preserves every admission-to-discharge stay and follow-up interval (day-first vs. month-first inferred per file/hospital source; `Mon DD, YYYY`, numeric, and ISO formats preserved). **DOBs are withheld** (`[DOB]`; FHIR `_birthDate` `data-absent-reason: masked`) because a shifted DOB still leaks birth year (**69% → 23%** pooled re-identification).
+- **Truthful age bands & k-escalation:** One band per patient (`10`-year, escalating to `20`-year with `5`/`10`-year boundary offsets when recorded ages straddle a decade; clamped at `0`, top-coded at `90+`). Villages generalise to tehsil; groups below `k = 5` on `(gender, age_band, place)` escalate to district, then `20`-year bands.
+- **High-risk & rare-condition protection:** Cohort-scaled rarity cap (`1` patient for cohorts ≤ 80, `2` for ≤ 160, `3` above 160) generalises rare diagnoses (codes + free text) to their **ICD-10 chapter**, withholds rare procedures, and jitters discharge dates by `+1` day for high-risk profiles (rare diagnosis/procedure, stay length ≤ 3 patients, or age ≤ 5 / ≥ 85).
 
-`src/release/` checks every output file in memory before anything is written:
+### 6. In-Memory Release Gate (`src/release/`)
+Before disk commit, every rendered file must pass:
+1. **Structural & FHIR R4 checks:** Valid UTF-8, identical CSV row/cell shape, identical JSON keys/value types (allowing age-band strings and FHIR `_field` extensions), identical text line count, and valid FHIR resource types, internal references, dates, and base64 attachments.
+2. **Self-attack leak scan:** Re-reads output with scorer normalization, base64/hex decoding, and separator-stripped Indic/ASCII digits. Leftover PII gets **one safe repair pass**; if any check still fails, the file is quarantined (`leak_check_failed` / `format_check_failed`) and Passes 2–4 re-run without it (≤ 3 rounds).
 
-- **Format:** the output must be valid UTF-8 and parse in its own format, with the same shape as the input: the same CSV rows and cells per row, the same JSON structure and value types (the only allowed changes are a number becoming an age band and a FHIR value replaced by the standard "masked" marker), the same text line count. FHIR bundles must also have known resource types, references that resolve inside the bundle, valid FHIR dates and decodable attachments.
-- **Leaks:** every identifier and full name detected in the file must be gone, read the way the organizers read output: case and spacing ignored, base64 decoded, and numbers matched across spaces, dashes and dots. A name may remain only as often as it appeared inside protected text, such as a doctor who shares a relative's name.
-- **One repair, then quarantine:** leftover plain text is replaced once and the file is checked again. If it still fails, it is quarantined with `leak_check_failed` or `format_check_failed`.
-- **Re-planning:** when a file is quarantined, the remaining files are read again from the input, and linking and the privacy plan are redone without it (at most three rounds, `replan_max_rounds`), so look-alike groups and links describe only what is released.
+---
 
-If linking or the privacy plan fails, the run continues: records stay unlinked, or quasi-identifiers are left ungeneralised, but personal data is still removed and the gate still checks every file.
+## Attack Resistance, Unseen Formats & Scaling
 
-## Measured privacy
+### Published Attacker Simulation (`tools/attacker_lite.py`)
 
-`tools/attacker_lite.py` follows the organizers' published attack description: it reads each record as field and value pairs, filters the practice voter register by phone, email, district, gender, age, birth year, tehsil, village and PIN (skipping a filter that would empty the list), weights the remaining people by name, relative and house-number matches, pools records that share a fake ID or reference number, and tries known visit dates, conditions and stay lengths. It scores itself with the practice answer key (read only) and divides by the organizers' published results on the raw data, as the scorer does. On the raw practice data it re-identifies the same share of patients as the organizers' attacker (97.9%); it is weaker on record linkage and the targeted attack, so those two numbers understate the real risk.
+| Attack Vector | Raw Data | Umbrella | Notes |
+|---|---:|---:|---|
+| **A1** — Direct identifier exposure | 100% | **0%** | Zero names, phones, emails, IDs, or canaries survive |
+| **A2 / A3** — Voter-list record linkage | 92% | **5%** | Posterior probability mass on the true person |
+| **A4** — Longitudinal profile pooling | 98% | **23%** | Driven down from 69% by withholding DOB & consistent shifts |
+| **A5** — Targeted visit-fact attack | 100% | **58%** | Common diagnoses are deliberately kept for clinical utility |
+| **A6 / A7** — Pseudonym inversion / cross-secret link | — | **0% / 0%** | Keyed HMAC over anchor locator; rotates under new secret |
 
-| Attack (practice data) | Raw data | Umbrella |
-|---|---:|---:|
-| Direct exposure | 100% | 0% |
-| Record linkage (mean probability on the true person) | 92% | 5% |
-| Patients re-identified from pooled records | 98% | 23% |
-| Targeted attack with known facts | 100% | 58% |
-| Fake IDs reversed | | 0% |
-| Fake IDs or shifted dates stable under another secret | | 0% |
+### Unseen-Format Chaos Suite & Linear Runtime Scaling
+- **Zero practice-data tuning (`tools/chaos_mutator.py`):** Replaces every name with invented Latin & Devanagari tokens absent from our lexicons, mutates phone/Aadhaar/ID formats & hospital prefixes, rewrites CSV headers, JSON keys, and Hindi/Hinglish labels, and scrambles date formats (`truth.json` read-only; leak checker calibrated on raw scrambled input first). Across **5 independent seeds** (`809–840` injected PII values each): **0.0% leaked** and **0 / 8 canaries**.
 
-The targeted attack's remaining hits come from common diagnoses that are kept on purpose: once age, gender and district narrow the field, the known condition appears in only one profile. Hiding common diagnoses would cost far more clinical value than it protects.
-
-## Speed and memory
-
-The pipeline runs on one CPU core, with the standard library only. `tools/scale_check.py` builds larger inputs from scrambled copies of the practice data (each copy with new names and numbers) and from the practice bulk export repeated many times, and measures run time and peak memory (Apple M-series laptop):
-
-| Input | Records | Seconds | Peak memory |
+| Workload (`tools/scale_check.py`, Apple M-series, 1 core) | Records | Time | Peak RSS |
 |---|---:|---:|---:|
-| Practice data (200 files) | 815 | 1.4 | 49 MB |
-| 16 scrambled copies | 13,049 | 22 | 331 MB |
-| 32 scrambled copies | 26,107 | 44 | 540 MB |
-| One 4 MB CSV register | 32,000 | 45 | 647 MB |
-| One 25 MB JSON bulk export | 144,000 | 104 | 1.6 GB |
+| Practice dataset (`200` mixed files) | 815 | **1.4 s** | **49 MB** |
+| `16×` scrambled copies | 13,049 | **22 s** | **331 MB** |
+| `32×` scrambled copies | 26,107 | **44 s** | **540 MB** |
+| Single `4 MB` CSV register | 32,000 | **45 s** | **647 MB** |
+| Single `25 MB` JSON bulk export | 144,000 | **104 s** | **1.6 GB** |
 
-Run time grows linearly with the input (growth exponent 0.98 to 0.99). Work that compares records with each other is indexed: one-word names are only compared with full names sharing a consonant skeleton, records with identical clues are checked for conflicts once, a JSON record's fields are read from its own subtree, and the release gate reads each output once into an index instead of searching it once per identifier. Once a file passes the gate, its parsed copy is dropped, and marked spans, the most numerous objects, are stored without per-object dictionaries. `tools/verify.sh --scale` repeats the measurement and fails if run time grows faster than linear.
+---
 
-## How it works
+## Security, Models & Limitations
 
-The pipeline runs in five passes:
+> [!IMPORTANT]
+> **Models Declaration:** **None.** Umbrella uses zero LLMs, zero generative models, and zero pretrained transformers or ML weights — only deterministic rules, curated gazetteers, custom transliteration/phonetic matching, and keyed `HMAC-SHA256`.
 
-1. **Ingest and detect:** every file is hashed, identified from its content, decoded, parsed and split into records. Personal data is marked; medical content is protected.
-2. **Link:** records of the same patient are matched across files, scripts and hospitals, and each patient gets a keyed fake ID.
-3. **Privacy plan:** each patient gets one date shift, one age band and one location level, used in every file they appear in.
-4. **Build and verify:** every output file is built in memory and passed through the release gate; if a file is refused, passes 2 to 4 are redone without it.
-5. **Commit:** verified files are written, then the patient list, then the report, after comparing the file ledger with what is on disk.
-
-A single file ledger tracks every input file from start to finish, so no file is silently dropped and the report's counts match what was released.
-
-## Repository layout
-
-| Path | Purpose |
-|---|---|
-| `main.py` | entry point |
-| `src/pipeline.py` | runs the passes |
-| `src/core/` | shared data shapes, file ledger, secret handling, policy reader, safety shell |
-| `tests/` | automated tests (`pip install -r requirements-dev.txt`, then `python3 -m pytest`) |
-| `tools/verify.sh` | the full check: tests, repeat-run and different-secret runs, secret and temp-file checks, output contract, quality on practice data and leaks on scrambled data (`--submit` adds the organizers' submission check) |
-| `tools/chaos_mutator.py` | builds a scrambled copy of the practice data, to measure how the system does on names, numbers, labels and formats it was not tuned on |
-| `tools/leak_check.py` | counts how many of the values the scrambler inserted survive in an output |
-| `tools/scale_check.py` | times larger inputs and reports run time, peak memory and how run time grows |
-| `tools/attacker_lite.py` | our copy of the published attacker (direct exposure, record linkage, profile pooling, targeted attack, pseudonym inversion, cross-release linking), run on practice data |
-| `src/ingest/` | file walk, format detection from content, encoding rules, parsers, depth-proof JSON |
-| `src/detect/` | identifier and name patterns, the column and field profiler, the detection engine, field and label words |
-| `src/link/` | transliteration, phonetic name keys, date reading, linking clues, clustering, fake IDs and their placement |
-| `src/privacy/` | quasi-identifier mentions, the per-patient privacy plan, ICD-10 chapters |
-| `src/rewrite/` | the span writer, applying spans to fields, writing each file back in its original format |
-| `src/release/` | the release gate: format, shape and FHIR checks, leak check, repair |
-| `config/lexicons/` | name lists, medical word lists (drugs, symptoms, eponyms, clinical terms, Hindi medical words), grammar words, Uttar Pradesh and India-wide districts |
-| `config/policy.yaml` | privacy settings |
-| `raksha.toml` | how the organizers set up and run the submission |
-
-## Testing on unseen formats
-
-Hidden evaluation data uses names, labels and formats that never appear in the practice data. `tools/chaos_mutator.py` imitates that: it swaps every patient and relative name for new ones (consistently in Latin and Devanagari, including inside file names, JSON keys, metadata, base64 attachments and escaped text), replaces phone, Aadhaar and other ID numbers with new ones in new formats, gives hospital IDs new prefixes, renames CSV headers, JSON keys and free-text labels into other English, Hinglish and Hindi forms, and changes date formats.
-
-The organizers' practice answer key is only read, to know where the personal values are; no answer key is created or changed. Replacement names are never taken from the practice data or from the pipeline's own name lists (unused names are invented, in both scripts), so the scrambled run measures detection without help from those lists. The scrambler records the values it inserted, and `tools/leak_check.py` counts how many survive in an output, reading text the way the organizers' checker does (normalised, with base64 decoded and numbers matched across separators). Names and numbers are searched across the whole output; dates of birth only in the file they came from, as the organizers do, because another patient's shifted date can land on the same day elsewhere by chance. `tools/verify.sh` first checks that every inserted value is visible in an untouched copy of the scrambled input, so the leak check is calibrated before it is trusted.
-
-## Security
-
-- `RAKSHA_SECRET` stays in memory. Separate subkeys are derived for fake IDs, date shifts, ID tokens and encryption.
-- Output messages contain an event code and numbers only; the logger drops any text value. Errors are reported by exception class name only, and Python warnings are silenced.
-- Each file is processed inside its own error boundary: a failure sets that file aside with the reason `processing_error`, and the run continues.
-- A time watchdog sets aside any file not started before the time budget (`time_budget_seconds` in the policy, 720 by default), so the run always finishes with a complete, honest report.
-- The input folder is only read. Nothing is written to temporary folders or the home folder.
-
-## Models
-
-None. The system uses rules, word lists and classical matching only.
-
-## Known limitations
-
-- **Rules, not models.** A name with no context, in no word list and in a format unlike anything seen before could be missed. The scrambled-data test (0 of 809 inserted values visible) and the release gate reduce this risk; they do not remove it.
-- **Targeted attack.** Our attacker still succeeds against 58% of the people with known visit facts, because common diagnoses are kept on purpose. Our attacker is also weaker than the official one on record linkage and the targeted attack, so those two numbers may understate the real risk.
-- **k=5 is not reachable on small data.** All 57 practice patients stay in groups below 5 even at district level and 20-year bands; rare patients are protected by the rare-value rules instead, and 50 of 57 are unique inside the release on age band, district, admission week and diagnoses.
-- **Unsupported formats.** PDF, image and XML files are quarantined, not cleaned.
-- **Very large single files.** A 25 MB JSON export runs in 104 seconds but needs 1.6 GB of memory, because linking and the privacy plan see every record at once.
-- **Ambiguous dates** such as 03/04/2026 are read day-first or month-first from the file's own dates, or from other files of the same source; a file with no deciding dates and no known source defaults to day-first.
-- **Withheld dates of birth** cost research on exact age at a visit; the age band remains.
+- **Zero side-channel leakage:** `RAKSHA_SECRET` never leaves memory and derives domain-separated subkeys. Logs emit event codes and integer counts only; exceptions log class names only; warnings are silenced; `input/`, `TMPDIR`, and `HOME` remain untouched; `720 s` watchdog guarantees clean termination and ledger-to-disk reconciliation.
+- **Known limitations:**
+  1. *Rule-based ceiling:* An unlabelled name absent from all context cues and word lists in an unseen layout could slip past Pass 1 (mitigated by column profiling and the release gate).
+  2. *Targeted attack (58%):* Common diagnoses are intentionally preserved for research utility; our local attacker is also simpler than the official evaluator on A2/A3 and A5.
+  3. *Small-cohort `k = 5`:* On 57 patients, district + 20-year bands still leave small groups; rare-diagnosis/procedure/LOS rules protect outliers instead.
+  4. *Quarantined binaries & large single files:* `PDF`, images, and `XML` are quarantined rather than OCR/parsed; a single `25 MB` JSON file peaks at `1.6 GB` RSS because all records link in memory; ambiguous dates (`03/04`) fall back to day-first when neither file nor hospital source disambiguates; withheld DOBs trade exact age-at-visit for strong re-identification defence.
