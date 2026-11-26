@@ -5,7 +5,12 @@ A change here needs agreement from everyone who owns a stage.
 from __future__ import annotations
 
 import datetime as dt
+import sys
 from dataclasses import dataclass, field
+
+# Spans are the most numerous objects (hundreds of thousands on large inputs); slots drop the
+# per-object dictionary. Slots need Python 3.10.
+_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
 
 
 @dataclass
@@ -32,7 +37,7 @@ class TextView:
     field_type: str = "unknown"
 
 
-@dataclass
+@dataclass(**_SLOTS)
 class Span:
     view: int
     start: int
