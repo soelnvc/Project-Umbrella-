@@ -14,7 +14,8 @@ from src.detect import shield, vocab
 from src.detect.patterns import DEVA_LETTERS
 
 DEVA = DEVA_LETTERS
-_TOKEN = re.compile(rf"[A-Za-z][A-Za-z'’]*\.?|[{DEVA}]+")
+_TOKEN = re.compile(rf"(?:[A-Z]\.){{2,4}}|[A-Za-z][A-Za-z'’]*\.?|[{DEVA}]+")
+_INITIALS_ONLY = re.compile(r"^(?:[A-Za-z]\.\s*)+$")
 _DEVA_TOKEN = re.compile(rf"[{DEVA}]+")
 _STOP_ADMIN = frozenset({"tehsil", "distt", "district", "dist", "block", "post", "po", "ps", "thana",
                          "तहसील", "जिला", "जनपद", "थाना", "डाकघर"})
@@ -42,6 +43,7 @@ _POSSESSIVE = re.compile(r"(?<![A-Za-z])(?P<name>[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)
 # "called by X", "witnessed by X": a person who is not the treating doctor.
 _BY_PERSON = re.compile(r"(?i:(?<![A-Za-z])(?:called|brought|accompanied|informed|witnessed|escorted|signed|"
                         r"collected|consented|attended|visited|raised|reported)\s+by\s+|consent\s+given\s+by\s+)")
+_ROLE_BEFORE_NAME = re.compile(r"(?i:(?<![A-Za-z])(?:attendant|escort|guardian|informant)[ \t]+)(?=[A-Z\u0900-\u097F])")
 _CHAT_HEADER = re.compile(r"(?m)^\s*\[[^\]\n]{5,30}\]\s*([^:\n\[\]]{2,40}?):"
                           r"|^\s*\d{1,2}/\d{1,2}/\d{2,4},\s*\d{1,2}:\d{2}\s*(?:[ap]m)?\s*-\s*([^:\n]{2,40}?):",
                           re.IGNORECASE)
@@ -73,8 +75,11 @@ def name_word(word: str, need_caps: bool) -> bool:
 
 
 def _only_generic(text: str) -> bool:
+    if _INITIALS_ONLY.match(text.strip()):
+        return True
     words = [w.rstrip(".").lower() for w in _TOKEN.findall(text)]
-    return not words or all(w in vocab.GENERIC_NAME_PARTS or len(w) == 1 for w in words)
+    return not words or all(w in vocab.GENERIC_NAME_PARTS or len(w) == 1 or _INITIALS_ONLY.match(w + ".")
+                            for w in words)
 
 
 class _Tokens:
@@ -86,8 +91,9 @@ class _Tokens:
             self.by_end[m.end()] = m
             self.by_start[m.start()] = m
 
-    def back(self, pos: int, need_caps: bool, max_tokens: int = 3, allow_comma: bool = False):
-        """Name words ending just before pos, separated by single spaces."""
+    def back(self, pos: int, need_caps: bool, max_tokens: int = 3, allow_comma: bool = False,
+             allow_surname_comma: bool = False):
+        """Name words ending just before pos, separated by single spaces (or 'Surname, Given')."""
         text = self.text
         k = pos
         while k > 0 and text[k - 1] in " \t":
@@ -97,6 +103,7 @@ class _Tokens:
             while k > 0 and text[k - 1] in " \t":
                 k -= 1
         picked = []
+        comma_used = False
         while len(picked) < max_tokens:
             m = self.by_end.get(k)
             if not m or not name_word(m.group(0), need_caps):
@@ -104,6 +111,14 @@ class _Tokens:
             picked.append(m)
             k = m.start()
             if k >= 1 and text[k - 1] == " " and (k < 2 or text[k - 2] != " "):
+                if (allow_surname_comma and not comma_used and 1 <= len(picked) <= 2
+                        and k >= 2 and text[k - 2] == ","):
+                    prev = self.by_end.get(k - 2)
+                    if prev and len(prev.group(0).rstrip(".")) >= 2 and name_word(prev.group(0), need_caps=True):
+                        # Only accept "Surname, Given" when nothing immediately before Surname is a label colon.
+                        comma_used = True
+                        k -= 2
+                        continue
                 k -= 1
             else:
                 break
@@ -113,22 +128,34 @@ class _Tokens:
         return None if _only_generic(text[start:end]) else (start, end)
 
     def forward(self, pos: int, need_caps: bool, max_tokens: int = 4):
-        """Name words starting at pos (after spaces), separated by single spaces."""
+        """Name words starting at pos (after spaces), separated by single spaces (or 'Surname, Given')."""
         text = self.text
         k = pos
         while k < len(text) and text[k] in " \t":
             k += 1
         picked = []
+        comma_used = False
         while len(picked) < max_tokens:
             m = self.by_start.get(k)
             if not m or not name_word(m.group(0), need_caps):
                 break
-            if m.end() < len(text) and text[m.end()] == "/":
+            if len(m.group(0).rstrip(".")) == 1 and m.end() < len(text) and text[m.end()] == "/":
                 break
             picked.append(m)
             k = m.end()
             if k < len(text) and text[k] == " " and (k + 1 >= len(text) or text[k + 1] != " "):
                 k += 1
+            elif (len(picked) == 1 and not comma_used and len(m.group(0).rstrip(".")) >= 2
+                  and k + 2 <= len(text) and text[k:k + 2] == ", "
+                  and (k + 2 >= len(text) or text[k + 2] != " ")):
+                nxt = self.by_start.get(k + 2)
+                if (nxt and name_word(nxt.group(0), need_caps=True)
+                        and not (len(nxt.group(0).rstrip(".")) == 1 and nxt.end() < len(text) and text[nxt.end()] == "/")
+                        and not _RELATION.match(text, k + 2) and not _CARE_OF.match(text, k + 2)):
+                    comma_used = True
+                    k += 2
+                else:
+                    break
             else:
                 break
         if not picked:
@@ -165,9 +192,11 @@ def find_contextual_names(text: str) -> list[Span]:
             kind = "RELATIVE_NAME" if _ATTENDANT.match(text, found[1]) else "PATIENT_NAME"
             add(found, kind, "timeline", P_CONTEXT)
     for m in _ATTENDANT.finditer(text):
-        add(toks.back(m.start(), need_caps=True), "RELATIVE_NAME", "attendant", P_RELATION + 1)
+        add(toks.back(m.start(), need_caps=True, allow_surname_comma=True), "RELATIVE_NAME", "attendant", P_RELATION + 1)
     for m in _BY_PERSON.finditer(text):
         add(toks.forward(m.end(), need_caps=True), "RELATIVE_NAME", "by_person", P_RELATION)
+    for m in _ROLE_BEFORE_NAME.finditer(text):
+        add(toks.forward(m.end(), need_caps=True), "RELATIVE_NAME", "attendant", P_RELATION)
     for m in _POSSESSIVE.finditer(text):
         words = m.group("name").split()
         while words and not name_word(words[0], need_caps=True):

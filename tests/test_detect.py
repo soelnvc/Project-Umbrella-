@@ -76,6 +76,10 @@ def test_clinical_text_is_untouched(text):
     ("Patient's Name - Asha Rani", "Patient's Name - [NAME]"),
     ("Attendant: Zubair Khan", "Attendant: [RELATIVE]"),
     ("Name: Ravi Kumar S/o Mohan Lal", "Name: [NAME] S/o Mohan Lal"),
+    ("Name: Sharma, Ravi", "Name: [NAME]"),
+    ("Patient Name: YADAV, RAMESH KUMAR", "Patient Name: [NAME]"),
+    ("Name: Ram Kumar/45/M", "Name: [NAME]/45/M"),
+    ("Patient: Anita Sharma/F/32", "Patient: [NAME]/F/32"),
 ])
 def test_labelled_names(text, expected):
     assert clean(text) == expected

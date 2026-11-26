@@ -122,3 +122,31 @@ def test_a_whole_name_field_is_not_overridden_by_a_word_list_match():
 ])
 def test_care_notes_contain_protected_medical_words(text):
     assert shield.find_protected(text)
+
+
+def test_shield_does_not_leak_person_clauses_or_cross_newlines():
+    from src.detect import engine
+    cases = [
+        ("C/O fever x 3 days, brought by Ramesh Kumar", "C/O fever x 3 days, brought by [RELATIVE]"),
+        ("C/O pain abdomen x 6 days, S/o Ram Prasad", "C/O pain abdomen x 6 days, S/o [RELATIVE]"),
+        ("K/C/O HTN, attendant Sunita Devi", "K/C/O HTN, attendant [RELATIVE]"),
+        ("H/O TB, S/o Mohan Lal", "H/O TB, S/o [RELATIVE]"),
+        ("डॉ. शर्मा ने रमेश को देखा", "डॉ. शर्मा ने [NAME] को देखा"),
+        ("Consultant: Dr. Verma\nName: Ramesh Kumar", "Consultant: Dr. Verma\nName: [NAME]"),
+        ("Name: Ramesh Kumar\nCity Hospital", "Name: [NAME]\nCity Hospital"),
+        ("Patient: Anita Sharma\nApex Labs", "Patient: [NAME]\nApex Labs"),
+    ]
+    for raw, expected in cases:
+        out = apply_text(raw, engine.free_text_spans(raw), KEYS)
+        assert out == expected, (raw, out)
+    # Ward on a non-address line in a multi-line note with an address elsewhere stays protected
+    note = "Address: H.No. 12, Tehsil Lalganj\nAdmitted to Ward 8\n"
+    assert any(s.source == "ward" for s in shield.find_protected(note))
+
+
+def test_left_overlap_protection_keeps_unprotected_suffix():
+    text = "Dr. Verma, Anita Sharma"
+    prot = shield.find_protected(text)
+    wide = Span(view=-1, start=0, end=len(text), type="PATIENT_NAME", role="patient",
+                action="redact", source="relation", priority=30)
+    assert apply_text(text, prot + [wide], KEYS) == "Dr. Verma, [NAME]"

@@ -21,10 +21,12 @@ _UNITS = (r"(?:mg/dl|mg/dL|mmol/l|mmol/L|g/dl|g/dL|mIU/L|miu/l|IU/L|U/L|mEq/L|ce
           r"mcg|µg|mg|gm|g|kg|ml|mL|l|L|IU|iu|units?|mmHg|bpm|/min|%|°F|°C|F|C|cm|mm|puffs?|sachets?|"
           r"tabs?|caps?|drops?|ml/hr|ml/kg)")
 
+_DEVA_STOP = r"(?:ने|को|का|की|के|से|मे|में|पर|और|द्वारा|मरीज़|मरीज|रोगी|नाम|आयु|उम्र|पता)"
 _DOCTOR = re.compile(
-    r"(?<![A-Za-z])(?:Dr|DR|Doctor)\.?\s+(?:[A-Z]\.\s*)*[A-Z][a-zA-Z'’-]+(?:\s+(?:[A-Z]\.|[A-Z][a-zA-Z'’-]+)){0,3}"
-    r"(?:\s*\((?:MD|MS|DM|MBBS|DNB|MCh|DGO|DCH|BAMS|BHMS|FRCS|MRCP)[^)]*\))?"
-    rf"|(?:डॉ|डा)\.?\s*[{DEVA}]+(?:\s+[{DEVA}]+){{0,2}}")
+    r"(?<![A-Za-z])(?:Dr|DR|Doctor)\.?[ \t]+(?:[A-Z]\.[ \t]*)*[A-Z][a-zA-Z'’-]+"
+    r"(?:[ \t]+(?:[A-Z]\.(?:[ \t]*[A-Z]\.)*|[A-Z][a-zA-Z'’-]+)){0,3}"
+    r"(?:[ \t]*\((?:MD|MS|DM|MBBS|DNB|MCh|DGO|DCH|BAMS|BHMS|FRCS|MRCP)[^)\n]*\))?"
+    rf"|(?:डॉ|डा)\.?[ \t]*[{DEVA}]+(?:[ \t]+(?!{_DEVA_STOP}(?![{DEVA}]))[{DEVA}]+){{0,2}}")
 _DOSE = re.compile(rf"(?<![\w.])\d+(?:\.\d+)?\s*{_UNITS}(?:\s*\+\s*\d+(?:\.\d+)?\s*{_UNITS})*(?![A-Za-z])")
 _FREQUENCY = re.compile(r"(?<![\d\-])[0-9½](?:\s*-\s*[0-9½]){2,3}(?![\d\-])")
 _DURATION = re.compile(
@@ -40,20 +42,35 @@ _COMPLAINT_DURATION = re.compile(
 _CARE_OF = re.compile(r"\bC\s*/\s*O\b\.?[ \t]*(?P<rest>[^\n.;|]*)", re.IGNORECASE)
 _CLAUSE_END = re.compile(r"[,.;|\n]")
 _HISTORY = re.compile(r"\b(?:No\s+)?(?:K\s*/\s*C\s*/\s*O|H\s*/\s*O)\b\.?[^\n.;|]*", re.IGNORECASE)
-_WARD = re.compile(rf"\bWard\s*(?:No\.?\s*)?\d+(?:\s*\({SPECIALTY}[^)]*\))?|\b\d+\s*\({SPECIALTY}[^)]*\)"
-                   rf"|\b(?:{SPECIALTY})\s+Ward\b|\bBed\s*(?:No\.?\s*)?\d+\b")
+# A comma inside C/O or H/O that introduces a person/attendant/relation clause ends clinical protection.
+_PERSON_AFTER_COMMA = re.compile(
+    r",\s*(?:"
+    r"(?:[SDWFM]\s*/\s*[Oo]|C\s*/\s*O)\b"
+    r"|(?:son|daughter|wife|husband|father|mother)\s+of\b"
+    r"|(?:पुत्र|पुत्री|पत्नी|पति)\b"
+    r"|(?:called|brought|accompanied|informed|witnessed|escorted|signed|collected|consented|attended|"
+    r"visited|raised|reported)\s+by\b"
+    r"|(?:attendant|relative|guardian|escort|bystander|caretaker|informant|patient|name|mobile|mob|phone|address)\b"
+    r"|(?:Mr|Mrs|Ms|Smt|Shri|Sri|Sh|Kumari|Begum)\.?\s+[A-Z]"
+    r"|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s*(?:\(\s*(?:attendant|relative|guardian|escort|son|daughter|wife|husband)\b|"
+    r"\b(?:ji|sahab|sahib|bhai|didi|babu)\b)"
+    r")",
+    re.IGNORECASE,
+)
+_WARD = re.compile(rf"\bWard\s*(?:No\.?\s*)?\d+(?:[ \t]*\({SPECIALTY}[^)\n]*\))?|\b\d+[ \t]*\({SPECIALTY}[^)\n]*\)"
+                   rf"|\b(?:{SPECIALTY})[ \t]+Ward\b|\bBed\s*(?:No\.?\s*)?\d+\b")
 _ADDRESS_CONTEXT = re.compile(r"(?i)\b(?:h\.?\s*no|house|makan|mohalla|near|opp|tehsil|distt?|vill|gali|"
                               r"colony|nagar|road|street|address|pata|c\s*/\s*o)\b|मकान|मोहल्ला|गली|तहसील|जिला|पता")
 # ASHA as a job title, not the name Asha: followed by a role word, or after "by", "the", "local".
-_ASHA = re.compile(r"(?i:\basha\s+(?:workers?|karyakartas?|sahyoginis?|facilitators?|didi\s*\(asha\)))"
+_ASHA = re.compile(r"(?i:\basha[ \t]+(?:workers?|karyakartas?|sahyoginis?|facilitators?|didi[ \t]*\(asha\)))"
                    r"|(?i:(?<=\bby\s)|(?<=\bthe\s)|(?<=\bour\s)|(?<=\blocal\s)|(?<=\bvillage\s)|(?<=\ban\s))ASHA\b"
-                   r"|आशा\s+(?:कार्यकर्ता|सहयोगिनी|बहू)")
+                   r"|आशा[ \t]+(?:कार्यकर्ता|सहयोगिनी|बहू)")
 _EPONYM_TAIL = (r"(?:disease|syndrome|palsy|sign|test|catheter|tube|fracture|procedure|operation|"
                 r"tetralogy|sarcoma|lymphoma|phenomenon|score|scale|ulcer|reflex|triad|tumou?r|"
                 r"anomaly|malformation|position|incision|point|chorea|encephalopathy|aneurysm)")
 _HOSPITAL = re.compile(
-    r"(?:\b[A-Z][A-Za-z.'&-]+\s+){1,5}(?:Hospital|Sadan|Nursing\s+Home|Medical\s+College|Clinic|"
-    r"Health\s+Cent(?:re|er)|Labs?|Diagnostics|Pathology|Charitable\s+Trust|Multispeciality|"
+    r"(?:\b[A-Z][A-Za-z.'&-]+[ \t]+){1,5}(?:Hospital|Sadan|Nursing[ \t]+Home|Medical[ \t]+College|Clinic|"
+    r"Health[ \t]+Cent(?:re|er)|Labs?|Diagnostics|Pathology|Charitable[ \t]+Trust|Multispeciality|"
     r"Multispecialty)\b")
 _WORD = re.compile(rf"[A-Za-z][A-Za-z'’-]*|[{DEVA}]+")
 # Short letter-and-digit codes: HbA1c, SpO2, SG039B, T2DM, B12 (identifiers have five digits or more).
@@ -101,18 +118,34 @@ def _eponyms(text: str) -> list[Span]:
     return [_keep(m.start(), m.end(), "eponym") for m in rx.finditer(text)]
 
 
+def _trim_person_clause(text: str, start: int, end: int) -> int:
+    m = _PERSON_AFTER_COMMA.search(text, start, end)
+    return m.start() if m else end
+
+
+def _line_has_address(text: str, pos: int) -> bool:
+    line_start = text.rfind("\n", 0, pos) + 1
+    line_end = text.find("\n", pos)
+    line = text[line_start: len(text) if line_end < 0 else line_end]
+    return bool(_ADDRESS_CONTEXT.search(line))
+
+
 def find_protected(text: str) -> list[Span]:
     spans: list[Span] = []
     for rx, source in ((_DOCTOR, "doctor"), (_DOSE, "dose"), (_FREQUENCY, "frequency"),
-                       (_DURATION, "duration"), (_HISTORY, "history"), (_ASHA, "asha"),
-                       (_HOSPITAL, "hospital")):
+                       (_DURATION, "duration"), (_ASHA, "asha"), (_HOSPITAL, "hospital")):
         spans.extend(_keep(m.start(), m.end(), source) for m in rx.finditer(text))
+    for m in _HISTORY.finditer(text):
+        end = _trim_person_clause(text, m.start(), m.end())
+        if end > m.start():
+            spans.append(_keep(m.start(), end, "history"))
     for m in _CARE_OF.finditer(text):
         if complaint_like(m.group("rest")):
-            spans.append(_keep(m.start(), m.end(), "complaint"))
-    address_here = bool(_ADDRESS_CONTEXT.search(text))
+            end = _trim_person_clause(text, m.start(), m.end())
+            if end > m.start():
+                spans.append(_keep(m.start(), end, "complaint"))
     for m in _WARD.finditer(text):
-        if not address_here or "(" in m.group(0) or m.group(0).lower().startswith("bed"):
+        if not _line_has_address(text, m.start()) or "(" in m.group(0) or m.group(0).lower().startswith("bed"):
             spans.append(_keep(m.start(), m.end(), "ward"))
     spans.extend(_eponyms(text))
     for m in _CODE.finditer(text):

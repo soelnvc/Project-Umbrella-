@@ -49,8 +49,12 @@ def _blocks(protection: Span, span: Span) -> bool:
     return True
 
 
+def _is_word_char(ch: str) -> bool:
+    return ch.isalpha() or "\u0900" <= ch <= "\u097F"
+
+
 def _shielded(span: Span, protected: list[Span], text: str | None) -> Span | None:
-    """The part of a name or address span before the first protection it overlaps, or None.
+    """The part of a name or address span outside any protection it overlaps, or None.
 
     A whole field already classified as a name is only overridden by a doctor protection, and a
     labelled name is not dropped because its first word is also on a word list.
@@ -60,12 +64,23 @@ def _shielded(span: Span, protected: list[Span], text: str | None) -> Span | Non
         return span
     cut = min(p.start for p in blockers)
     if cut <= span.start:
-        return None
+        tail = max(p.end for p in blockers if p.start <= span.start < p.end)
+        if tail >= span.end:
+            return None
+        new_start = tail
+        if text is not None:
+            while new_start < span.end and not _is_word_char(text[new_start]):
+                new_start += 1
+            if not any(_is_word_char(ch) for ch in text[new_start:span.end]):
+                return None
+        sub = Span(view=span.view, start=new_start, end=span.end, type=span.type, role=span.role,
+                   action=span.action, source=span.source, priority=span.priority, replacement=span.replacement)
+        return _shielded(sub, protected, text)
     end = cut
     if text is not None:
-        while end > span.start and not (text[end - 1].isalpha() or text[end - 1] in ".'’"):
+        while end > span.start and not (_is_word_char(text[end - 1]) or text[end - 1] in ".'’"):
             end -= 1
-        if not any(ch.isalpha() for ch in text[span.start:end]):
+        if not any(_is_word_char(ch) for ch in text[span.start:end]):
             return None
     return Span(view=span.view, start=span.start, end=end, type=span.type, role=span.role,
                 action=span.action, source=span.source, priority=span.priority, replacement=span.replacement)

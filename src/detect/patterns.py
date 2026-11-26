@@ -106,15 +106,24 @@ def label_kind(label: str) -> str | None:
     return None
 
 
+_COMMA_STOP = frozenset({
+    "h", "house", "makan", "flat", "plot", "mohalla", "vill", "village", "gram", "gaon", "tehsil", "teh",
+    "distt", "district", "dist", "near", "opp", "opposite", "behind", "dr", "doctor", "attendant", "relative",
+    "guardian", "escort", "discharged", "admitted", "referred", "seen", "son", "daughter", "wife", "husband",
+})
+
+
 def capture_name(text: str, start: int) -> tuple[int, int] | None:
-    """The run of name-shaped words starting at start (after spaces), or None."""
+    """The run of name-shaped words starting at start (after spaces), including 'Surname, Given'."""
     i = start
     while i < len(text) and text[i] in " \u00a0":
         i += 1
-    begin, end, count = i, i, 0
+    begin, end, count, comma_used = i, i, 0, False
     while i < len(text) and count < 6:
         m = _NAME_TOKEN.match(text, i)
-        if not m or (m.end() < len(text) and text[m.end()] == "/"):
+        if not m:
+            break
+        if len(m.group(0).rstrip(".")) == 1 and m.end() < len(text) and text[m.end()] == "/":
             break
         word = m.group(0).rstrip(".").lower()
         if word in vocab.FIELD_STOP_WORDS:
@@ -124,6 +133,18 @@ def capture_name(text: str, start: int) -> tuple[int, int] | None:
         i = end
         if i < len(text) and text[i] == " " and (i + 1 >= len(text) or text[i + 1] != " "):
             i += 1
+        elif (count == 1 and not comma_used and len(word) >= 2 and i + 2 <= len(text)
+              and text[i] == "," and text[i + 1] == " " and (i + 2 >= len(text) or text[i + 2] != " ")):
+            nxt = _NAME_TOKEN.match(text, i + 2)
+            nw = nxt.group(0).rstrip(".") if nxt else ""
+            if (nxt and nw and (nw[0].isupper() or not nw[0].isascii())
+                    and not (len(nw) == 1 and nxt.end() < len(text) and text[nxt.end()] == "/")
+                    and nw.lower() not in vocab.FIELD_STOP_WORDS and nw.lower() not in _COMMA_STOP
+                    and nw.lower() not in vocab.COMMON_WORDS and nw.lower() not in vocab.MEDICAL_WORDS):
+                comma_used = True
+                i += 2
+            else:
+                break
         else:
             break
     if count == 0:

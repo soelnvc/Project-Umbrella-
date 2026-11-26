@@ -49,6 +49,11 @@ def clean_file(name: str, text: str) -> str:
     ("Sample received from Sunita's attendant", "Sample received from [NAME]'s attendant"),
     ("AMB-436,Sitapur,Lucknow,called by Kaveri Nambiar 94054-71434", "AMB-436,Sitapur,Lucknow,called by [RELATIVE] [PHONE]"),
     ("[06/08/26, 11:11 pm] Deepak Mama: <attachment: report.pdf>", "[06/08/26, 11:11 pm] [RELATIVE]: <attachment: report.pdf>"),
+    # surname-first and compact initials
+    ("S/o Sharma, Mohan", "S/o [RELATIVE]"),
+    ("S/o R.K. Verma", "S/o [RELATIVE]"),
+    ("Mr. R.K. Gupta admitted", "Mr. [NAME] admitted"),
+    ("Sharma, Ravi (attendant)", "[RELATIVE] (attendant)"),
 ])
 def test_contextual_names(text, expected):
     assert clean(text) == expected
