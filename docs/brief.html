@@ -4,24 +4,25 @@
 <meta charset="utf-8">
 <title>Umbrella - Project Brief</title>
 <style>
-  @page { size: A4; margin: 12mm 13mm 11mm 13mm; }
+  @page { size: A4; margin: 11mm 13mm 10.5mm 13mm; }
   * { box-sizing: border-box; }
   body { font-family: "Helvetica Neue", Helvetica, Arial, "Kohinoor Devanagari", sans-serif; font-size: 10pt;
-         line-height: 1.32; color: #16202a; margin: 0; }
-  h1 { font-size: 17pt; margin: 0 0 1mm 0; color: #0b3d5c; letter-spacing: -0.2px; }
-  h2 { break-after: avoid-page; font-size: 11.5pt; margin: 3.2mm 0 1.2mm 0; color: #0b3d5c; border-bottom: 1px solid #c9d6df; padding-bottom: 0.6mm; }
-  p { margin: 0 0 1.6mm 0; }
-  .meta { color: #42515e; margin-bottom: 1.8mm; }
-  .pitch { background: #eef5f9; border-left: 3px solid #0b6e99; padding: 1.8mm 2.6mm; margin: 0 0 1mm 0; }
-  ul { margin: 0 0 1.4mm 0; padding-left: 4.6mm; }
-  li { margin: 0 0 0.9mm 0; }
-  table { border-collapse: collapse; width: 100%; margin: 0.6mm 0 1.6mm 0; }
-  th, td { border: 1px solid #c9d6df; padding: 0.8mm 1.8mm; vertical-align: top; text-align: left; }
-  th { background: #eef5f9; font-weight: 600; }
-  td.n { text-align: right; white-space: nowrap; }
-  .page-break { break-before: page; }
-  .small { font-size: 10pt; color: #42515e; }
-  code { font-family: Menlo, Consolas, monospace; font-size: 9.2pt; background: #f2f4f6; padding: 0 0.6mm; border-radius: 1px; }
+         line-height: 1.30; color: #16202a; margin: 0; }
+  h1 { font-size: 15.6pt; margin: 0 0 1.2mm 0; color: #0b3d5c; letter-spacing: -0.25px; white-space: nowrap; }
+  h2 { break-after: avoid-page; font-size: 11.4pt; margin: 2.5mm 0 1.1mm 0; color: #0b3d5c; border-bottom: 1px solid #c9d6df; padding-bottom: 0.5mm; }
+  h2.page-break { break-before: page; margin-top: 0; }
+  p { margin: 0 0 1.4mm 0; }
+  .meta { color: #42515e; margin-bottom: 1.6mm; }
+  .pitch { background: #eef5f9; border-left: 3px solid #0b6e99; padding: 1.6mm 2.6mm; margin: 0 0 1.1mm 0; }
+  ul { margin: 0 0 1.1mm 0; padding-left: 4.5mm; }
+  li { margin: 0 0 0.65mm 0; }
+  table { border-collapse: collapse; width: 100%; margin: 0.7mm 0 1.4mm 0; }
+  th, td { border: 1px solid #c9d6df; padding: 0.7mm 1.8mm; vertical-align: top; text-align: left; }
+  th { background: #eef5f9; font-weight: 600; color: #0b3d5c; }
+  td.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .subhead { font-weight: 600; color: #0b3d5c; margin: 1.0mm 0 0.6mm 0; }
+  .small { font-size: 10pt; color: #42515e; margin-top: 1.4mm; border-top: 1px solid #dce4ea; padding-top: 1.1mm; }
+  code { font-family: Menlo, Consolas, monospace; font-size: 9.3pt; background: #f2f4f6; padding: 0 0.5mm; border-radius: 2px; }
   svg text { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
 </style>
 </head>
@@ -31,165 +32,163 @@
 <div class="meta"><b>Track 3 &middot; Secret Wards</b> &middot; Team: <b>JenSON</b> &middot; Members: Siddhesh Goel (leader), Krishna Bhatia, Nithin Jagganatham &middot;
   Repo: <a href="https://github.com/soelnvc/Project-Umbrella-">github.com/soelnvc/Project-Umbrella-</a></div>
 
-<div class="pitch">Umbrella turns multilingual Indian hospital records (English, Hindi, Hinglish; CSV, JSON, FHIR, free text)
-into a research-ready release that is offline, CPU-only and model-free. It links each patient across files, hospitals
-and scripts under one keyed fake ID and gives that patient one consistent treatment everywhere. Every output file is then
-re-read by a release gate, and the release is measured against a copy of the published attacker.</div>
+<div class="pitch">Umbrella turns multilingual Indian hospital exports (English, Hindi, Hinglish; CSV, JSON, FHIR R4, free text)
+into an offline, CPU-only, model-free research release. It links each patient across files, hospitals and scripts under one
+keyed pseudonym, applies one consistent privacy plan everywhere, checks every output in memory via a release gate, and audits
+the release against the published voter-list attacker.</div>
 
 <h2>1. Architecture</h2>
-<svg viewBox="0 0 640 196" width="100%" role="img" aria-label="Pipeline diagram">
+<svg viewBox="0 0 640 192" width="100%" role="img" aria-label="Pipeline diagram">
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#0b6e99"/></marker>
   </defs>
   <g font-size="10.5" fill="#16202a">
-    <rect x="1" y="26" width="68" height="72" rx="5" fill="#f2f4f6" stroke="#8aa0ae"/>
-    <text x="35" y="50" text-anchor="middle" font-size="12" font-weight="600">Input</text>
-    <text x="35" y="66" text-anchor="middle">read only,</text>
-    <text x="35" y="79" text-anchor="middle">sorted</text>
+    <rect x="1" y="24" width="68" height="72" rx="5" fill="#f2f4f6" stroke="#8aa0ae"/>
+    <text x="35" y="48" text-anchor="middle" font-size="12" font-weight="600">Input</text>
+    <text x="35" y="64" text-anchor="middle">read only,</text>
+    <text x="35" y="77" text-anchor="middle">sorted</text>
 
-    <rect x="81" y="16" width="102" height="92" rx="5" fill="#eef5f9" stroke="#0b6e99"/>
-    <text x="132" y="34" text-anchor="middle" font-size="12" font-weight="600">1 Ingest, detect</text>
-    <text x="132" y="51" text-anchor="middle">format by content</text>
-    <text x="132" y="65" text-anchor="middle">patterns, context</text>
-    <text x="132" y="79" text-anchor="middle">clinical shield</text>
-    <text x="132" y="93" text-anchor="middle">hidden places</text>
+    <rect x="81" y="14" width="102" height="92" rx="5" fill="#eef5f9" stroke="#0b6e99"/>
+    <text x="132" y="32" text-anchor="middle" font-size="12" font-weight="600">1 Ingest, detect</text>
+    <text x="132" y="49" text-anchor="middle">format by content</text>
+    <text x="132" y="63" text-anchor="middle">patterns, context</text>
+    <text x="132" y="77" text-anchor="middle">clinical shield</text>
+    <text x="132" y="91" text-anchor="middle">hidden places</text>
 
-    <rect x="195" y="16" width="102" height="92" rx="5" fill="#eef5f9" stroke="#0b6e99"/>
-    <text x="246" y="34" text-anchor="middle" font-size="12" font-weight="600">2 Link</text>
-    <text x="246" y="51" text-anchor="middle">cross-script names</text>
-    <text x="246" y="65" text-anchor="middle">IDs, conflict rules</text>
-    <text x="246" y="79" text-anchor="middle">keyed HMAC</text>
-    <text x="246" y="93" text-anchor="middle">fake IDs</text>
+    <rect x="195" y="14" width="102" height="92" rx="5" fill="#eef5f9" stroke="#0b6e99"/>
+    <text x="246" y="32" text-anchor="middle" font-size="12" font-weight="600">2 Link</text>
+    <text x="246" y="49" text-anchor="middle">cross-script names</text>
+    <text x="246" y="63" text-anchor="middle">IDs, conflict rules</text>
+    <text x="246" y="77" text-anchor="middle">keyed HMAC</text>
+    <text x="246" y="91" text-anchor="middle">fake IDs</text>
 
-    <rect x="309" y="16" width="102" height="92" rx="5" fill="#eef5f9" stroke="#0b6e99"/>
-    <text x="360" y="34" text-anchor="middle" font-size="12" font-weight="600">3 Privacy plan</text>
-    <text x="360" y="51" text-anchor="middle">one shift, band and</text>
-    <text x="360" y="65" text-anchor="middle">place per patient</text>
-    <text x="360" y="79" text-anchor="middle">k-escalation, rare</text>
-    <text x="360" y="93" text-anchor="middle">values, no DOB</text>
+    <rect x="309" y="14" width="102" height="92" rx="5" fill="#eef5f9" stroke="#0b6e99"/>
+    <text x="360" y="32" text-anchor="middle" font-size="12" font-weight="600">3 Privacy plan</text>
+    <text x="360" y="49" text-anchor="middle">one shift, band and</text>
+    <text x="360" y="63" text-anchor="middle">place per patient</text>
+    <text x="360" y="77" text-anchor="middle">k-escalation, rare</text>
+    <text x="360" y="91" text-anchor="middle">values, no DOB</text>
 
-    <rect x="423" y="16" width="102" height="92" rx="5" fill="#eef5f9" stroke="#0b6e99"/>
-    <text x="474" y="34" text-anchor="middle" font-size="12" font-weight="600">4 Build, gate</text>
-    <text x="474" y="51" text-anchor="middle">one span writer</text>
-    <text x="474" y="65" text-anchor="middle">re-read: format,</text>
-    <text x="474" y="79" text-anchor="middle">shape, FHIR, leaks</text>
-    <text x="474" y="93" text-anchor="middle">one repair</text>
+    <rect x="423" y="14" width="102" height="92" rx="5" fill="#eef5f9" stroke="#0b6e99"/>
+    <text x="474" y="32" text-anchor="middle" font-size="12" font-weight="600">4 Build, gate</text>
+    <text x="474" y="49" text-anchor="middle">one span writer</text>
+    <text x="474" y="63" text-anchor="middle">re-read: format,</text>
+    <text x="474" y="77" text-anchor="middle">shape, FHIR, leaks</text>
+    <text x="474" y="91" text-anchor="middle">one repair</text>
 
-    <rect x="541" y="4" width="98" height="28" rx="5" fill="#e9f6ee" stroke="#2f8a57"/>
-    <text x="590" y="22" text-anchor="middle" font-size="11" font-weight="600">sanitized/</text>
-    <rect x="541" y="48" width="98" height="28" rx="5" fill="#e9f6ee" stroke="#2f8a57"/>
-    <text x="590" y="66" text-anchor="middle" font-size="11" font-weight="600">records.jsonl</text>
-    <rect x="541" y="92" width="98" height="28" rx="5" fill="#e9f6ee" stroke="#2f8a57"/>
-    <text x="590" y="110" text-anchor="middle" font-size="11" font-weight="600">report.json</text>
-    <text x="590" y="136" text-anchor="middle">5 Commit, reconcile</text>
+    <rect x="541" y="2" width="98" height="28" rx="5" fill="#e9f6ee" stroke="#2f8a57"/>
+    <text x="590" y="20" text-anchor="middle" font-size="11" font-weight="600">sanitized/</text>
+    <rect x="541" y="46" width="98" height="28" rx="5" fill="#e9f6ee" stroke="#2f8a57"/>
+    <text x="590" y="64" text-anchor="middle" font-size="11" font-weight="600">records.jsonl</text>
+    <rect x="541" y="90" width="98" height="28" rx="5" fill="#e9f6ee" stroke="#2f8a57"/>
+    <text x="590" y="108" text-anchor="middle" font-size="11" font-weight="600">report.json</text>
+    <text x="590" y="134" text-anchor="middle">5 Commit, reconcile</text>
 
-    <line x1="69" y1="62" x2="79" y2="62" stroke="#0b6e99" stroke-width="1.6" marker-end="url(#a)"/>
-    <line x1="183" y1="62" x2="193" y2="62" stroke="#0b6e99" stroke-width="1.6" marker-end="url(#a)"/>
-    <line x1="297" y1="62" x2="307" y2="62" stroke="#0b6e99" stroke-width="1.6" marker-end="url(#a)"/>
-    <line x1="411" y1="62" x2="421" y2="62" stroke="#0b6e99" stroke-width="1.6" marker-end="url(#a)"/>
-    <path d="M525,62 L532,62 L532,18 L539,18" fill="none" stroke="#0b6e99" stroke-width="1.6" marker-end="url(#a)"/>
-    <path d="M532,62 L539,62" fill="none" stroke="#0b6e99" stroke-width="1.6" marker-end="url(#a)"/>
-    <path d="M532,62 L532,106 L539,106" fill="none" stroke="#0b6e99" stroke-width="1.6" marker-end="url(#a)"/>
+    <line x1="69" y1="60" x2="79" y2="60" stroke="#0b6e99" stroke-width="1.6" marker-end="url(#a)"/>
+    <line x1="183" y1="60" x2="193" y2="60" stroke="#0b6e99" stroke-width="1.6" marker-end="url(#a)"/>
+    <line x1="297" y1="60" x2="307" y2="60" stroke="#0b6e99" stroke-width="1.6" marker-end="url(#a)"/>
+    <line x1="411" y1="60" x2="421" y2="60" stroke="#0b6e99" stroke-width="1.6" marker-end="url(#a)"/>
+    <path d="M525,60 L532,60 L532,16 L539,16" fill="none" stroke="#0b6e99" stroke-width="1.6" marker-end="url(#a)"/>
+    <path d="M532,60 L539,60" fill="none" stroke="#0b6e99" stroke-width="1.6" marker-end="url(#a)"/>
+    <path d="M532,60 L532,104 L539,104" fill="none" stroke="#0b6e99" stroke-width="1.6" marker-end="url(#a)"/>
 
-    <path d="M474,108 L474,126 L246,126 L246,110" fill="none" stroke="#b5651d" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#a)"/>
-    <text x="360" y="140" text-anchor="middle" fill="#b5651d">refused file: quarantine it, re-plan the rest</text>
+    <path d="M474,106 L474,123 L246,123 L246,108" fill="none" stroke="#b5651d" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#a)"/>
+    <text x="360" y="137" text-anchor="middle" fill="#b5651d">refused file: quarantine it, re-plan the rest</text>
 
-    <rect x="81" y="152" width="444" height="40" rx="5" fill="#fff8ec" stroke="#b5651d"/>
-    <text x="303" y="168" text-anchor="middle" font-size="11.5" font-weight="600">File ledger: the only place a file's status is decided</text>
-    <text x="303" y="184" text-anchor="middle">released, or quarantined with a fixed reason; never copied raw</text>
+    <rect x="81" y="148" width="444" height="39" rx="5" fill="#fff8ec" stroke="#b5651d"/>
+    <text x="303" y="164" text-anchor="middle" font-size="11.5" font-weight="600">File ledger: the only place a file's status is decided</text>
+    <text x="303" y="180" text-anchor="middle">released, or quarantined with a fixed reason; never copied raw</text>
   </g>
 </svg>
 
 <h2>2. How each part works</h2>
 <ul>
-  <li><b>Ingestion.</b> Format and encoding are read from the content, not the extension (JSON behind <code>.csv</code>,
-    UTF-16, BOMs). JSON of any depth is parsed without recursion. Empty, truncated, binary, PDF and XML files are
-    quarantined with a reason code; nothing broken is copied out.</li>
-  <li><b>Detection (3 scripts).</b> Patterns (Aadhaar, ABHA, PAN, phones with digit checks, emails, record numbers by
-    shape), a column profiler that classifies fields by their values with header hints in English, Hindi and Hinglish,
-    and context rules for names (including surname-first and initials): relation markers (S/o, पुत्र), honorifics, labels,
-    postpositions, chat senders and attendants. Text is also read through a normalised view (HTML entities, %-encoding,
-    <code>\uXXXX</code>, zero-width characters, diacritics and look-alike letters) and inside base64 and hex payloads,
-    file names, JSON keys and headers. A <b>clinical shield</b> protects doses, frequencies, durations, doctors, wards,
-    eponyms (Bell's palsy), <code>C/O</code> complaints versus care-of names, and ASHA the job versus Asha the name.</li>
-  <li><b>Linkage &amp; pseudonyms.</b> Our own Devanagari-to-Latin transliteration and a phonetic skeleton make
-    <i>मोहम्मद शाहिद</i>, <i>Mohammad Shahid</i> and <i>Mohd. Shahid</i> comparable. Compound blocking on name + second clue
-    (DOB, relative, village and age) scales linearly without dropping common surnames; gender, DOB, unique-ID and relative
-    conflicts forbid a merge, and a one-word name joins only a unique full-name group. Fake IDs are HMAC-SHA256 over the
-    patient's anchor record with a subkey of <code>RAKSHA_SECRET</code>, placed in the patient's record-number fields.</li>
-  <li><b>Privacy layer.</b> Per patient: one secret date shift of 30-180 days (intervals and stays stay exact), one
-    age band holding every age seen (10-year, 20-year for small groups, 90+), village to tehsil, 3-digit PIN. Dates of
-    birth are withheld (FHIR: the standard <code>data-absent-reason</code> "masked" marker). Look-alike groups below
-    k=5 move to district and wider bands. Rare diagnoses (unique on small cohorts, &le;3 patients on large ones) become
-    their ICD-10 chapter, rare procedures are withheld, and high-risk discharges move one extra day. Security is in section 5.</li>
+  <li><b>Ingestion.</b> Format and encoding are sniffed from bytes, not extensions (JSON inside <code>.csv</code>, tables inside
+    <code>.txt</code>, UTF-16, BOMs, strict UTF-8, legacy cp1252). JSON of any depth parses iteratively without recursion.
+    Empty, damaged, binary, PDF and XML files are quarantined with a fixed reason code — never copied raw.</li>
+  <li><b>Detection (3 scripts).</b> Shape rules (Aadhaar, ABHA, PAN, phones incl. Indic digits, emails, hospital IDs), a
+    value-driven column profiler with English/Hindi/Hinglish hints, and context rules (surname-first, initials, <code>S/o</code>/पुत्र,
+    honorifics, postpositions, attendants, chats). Runs over a normalised view (entities, <code>%XX</code>, <code>\uXXXX</code>,
+    zero-width, diacritics, homoglyphs) and inside base64/hex payloads, keys, headers and paths. A <b>clinical shield</b> keeps
+    doses, durations, doctors, wards, eponyms (Bell's palsy), <code>C/O</code> symptoms vs. persons, and ASHA worker vs. Asha.</li>
+  <li><b>Linkage &amp; pseudonyms.</b> Custom Devanagari-to-Latin transliteration and phonetic skeletons match
+    <i>मोहम्मद शाहिद</i>, <i>Mohammad Shahid</i> and <i>Mohd. Shahid</i>. Linear compound blocking on name + second clue
+    (DOB, relative, village/age) retains common surnames; gender, DOB, ID and relative conflicts veto merges. Keyed
+    <code>HMAC-SHA256</code> IDs (<code>PSN-</code>) replace patient record-number fields and FHIR <code>Patient.identifier</code>.</li>
+  <li><b>Privacy layer.</b> Per patient: one keyed <code>&plusmn;30&ndash;180d</code> shift (stays and intervals remain exact),
+    withheld DOB (FHIR <code>data-absent-reason: masked</code>), one truthful age band (<code>10/20-yr</code>, <code>90+</code>),
+    village &rarr; tehsil, and 3-digit PIN. Groups below <code>k=5</code> escalate to district and <code>20-yr</code> bands;
+    cohort-scaled rare diagnoses (&le;1 to &le;3 patients) become ICD-10 chapters, rare procedures are withheld, and high-risk discharges jitter +1 day.</li>
 </ul>
 
 <h2>3. USP</h2>
 <ul>
-  <li><b>It attacks itself.</b> A release gate re-reads every output the way the organizers do (normalised, base64 and hex
-    decoded, digits across separators) and refuses it if any of the file's own identifiers survive. Our copy of the
-    published attacker drove the policy: it showed a shifted DOB keeps the birth year and re-identified 69% of
-    patients, so DOBs are now withheld (23%).</li>
-  <li><b>One patient, one treatment, across scripts.</b> Cross-script linking with no wrong merges, and the same
-    shift, band and place in every file, so pooling a patient's records gives an attacker nothing new.</li>
-  <li><b>Meaning, not word lists.</b> Context rules separate a doctor from a relative with the same first name, a
-    complaint from a care-of name and a disease eponym from a person: 99.2% of medical values survive.</li>
+  <li><b>It attacks itself before commit.</b> An in-memory release gate re-reads every output with scorer normalisation, base64/hex
+    decoding and cross-separator digit checks, refusing leaks. Our copy of the published attacker drove policy: shifted DOBs
+    kept birth years and let pooled attacks re-identify 69% of patients, so DOBs are withheld (cutting risk to 23%).</li>
+  <li><b>One patient, one treatment, across scripts.</b> Cross-script linking with zero wrong merges applies the exact same
+    shift, age band and geography in every file, so pooling a patient's longitudinal records yields no narrowing intersection.</li>
+  <li><b>Clinical meaning, not naive word lists.</b> Context disambiguates a doctor from a relative sharing a first name, a
+    symptom complaint from a care-of relative, and clinical eponyms from people — preserving <b>99.2%</b> of medical values.</li>
 </ul>
 
-<h2>4. Privacy-utility trade-off (measured on the practice data)</h2>
+<h2 class="page-break">4. Privacy&ndash;utility trade-off (measured on the practice data)</h2>
 <table>
-  <colgroup><col style="width:66%"><col style="width:34%"></colgroup>
+  <colgroup><col style="width:68%"><col style="width:32%"></colgroup>
   <tr><th>Measure</th><th>Result</th></tr>
-  <tr><td>Personal data visible (<code>check_dev.py</code>): overall / Hindi / Hinglish</td><td class="n">0.0% / 0.0% / 0.0% of 3,230</td></tr>
-  <tr><td>Planted canaries found; broken files copied out</td><td class="n">0 of 4; 0</td></tr>
-  <tr><td>Medical values kept</td><td class="n">99.2%</td></tr>
-  <tr><td>Linking precision / recall / F0.5 (wrong merges)</td><td class="n">1.00 / 0.98 / 1.00 (0)</td></tr>
-  <tr><td>Our attacker: patients re-identified from pooled records (raw data 98%)</td><td class="n">23%</td></tr>
-  <tr><td>Our attacker: record linkage, probability on the true person (raw 92%)</td><td class="n">5%</td></tr>
+  <tr><td>Personal data visible (<code>check_dev.py</code>): overall / Hindi / Hinglish</td><td class="n"><b>0.0% / 0.0% / 0.0%</b> of 3,230</td></tr>
+  <tr><td>Planted canaries found; broken or unsupported files copied raw</td><td class="n">0 of 4; 0</td></tr>
+  <tr><td>Medical values kept (doses, vitals, labs, diagnoses, procedures, stays)</td><td class="n"><b>99.2%</b> (4,815 / 4,855)</td></tr>
+  <tr><td>Patient linking: precision / recall / F0.5 (wrong merges)</td><td class="n"><b>1.00 / 0.98 / 1.00</b> (0)</td></tr>
+  <tr><td>Our attacker: patients re-identified from pooled records (raw data 98%)</td><td class="n"><b>23%</b></td></tr>
+  <tr><td>Our attacker: voter-list record linkage probability on true person (raw 92%)</td><td class="n"><b>5%</b></td></tr>
   <tr><td>Our attacker: targeted attack with known visit facts (raw 100%)</td><td class="n">58%</td></tr>
-  <tr><td>Fake IDs reversible; fake IDs or dates stable under another secret</td><td class="n">0%; 0%</td></tr>
-  <tr><td>Unique in the release on age band, district, admission week, diagnoses</td><td class="n">50 of 57 patients</td></tr>
-  <tr><td>Run time / peak memory: practice set; 16&times; larger set</td><td class="n">1.4 s / 49 MB; 22 s / 331 MB</td></tr>
-  <tr><td><b>Data we did not tune on</b> (5 seeds): new names, numbers, IDs, columns, keys, labels, dates</td><td class="n">0% leaked; 0 of 8 canaries</td></tr>
+  <tr><td>Pseudonyms reversible; pseudonyms or shifts stable under a new secret</td><td class="n">0%; 0%</td></tr>
+  <tr><td>Unique in release on (age band, district, admission week, diagnoses)</td><td class="n">50 of 57 patients</td></tr>
+  <tr><td>Speed / peak RSS: practice set; 16&times; larger set (growth exponent)</td><td class="n">1.4 s / 49 MB; 22 s / 331 MB (0.99)</td></tr>
+  <tr><td><b>Unseen formats</b> (5 chaos seeds: new names, IDs, prefixes, columns, keys, dates)</td><td class="n"><b>0.0% leaked</b>; 0 of 8 canaries</td></tr>
 </table>
-<p><b>What we give up and why.</b> A shifted date of birth keeps the birth year, which pins the age: withholding DOBs
-cut pooled re-identification from 69% to 23%, at the cost of the DOB field's utility credit; 10- to 20-year bands cost a
-little precision. Tehsil instead of village and 3-digit PINs keep regional analysis, and per-patient shifts keep every
-interval and stay length exact (high-risk discharges move one day). The only medical values lost (0.8%) are unique rare
-diagnoses turned into their ICD-10 chapter and rare procedures, which single a patient out on their own. Common diagnoses
-are kept, so the targeted attack still succeeds against 58%; hiding them would cost far more clinical value than it
-protects. In a release of 57 patients nearly everyone is unique on the four attributes above, so the realistic measure
-is the attacker's, who must find the person in a register 4-5 times larger.</p>
+
+<div class="subhead">Why we chose these trade-offs</div>
+<ul>
+  <li><b>Withheld DOB + 10/20-year age bands:</b> Shifting DOB still reveals birth year; masking DOB slashed pooled
+    re-identification from <b>69% &rarr; 23%</b> while truthful bands preserve age-stratified epidemiology.</li>
+  <li><b>Tehsil + 3-digit PIN + per-patient date shifts:</b> Preserves regional public-health clustering and keeps every
+    follow-up interval and stay length exact (high-risk discharges move +1 day to defeat exact-stay matching).</li>
+  <li><b>Cohort-scaled rare conditions vs. common diagnoses:</b> Only rare diagnoses (mapped to ICD-10 chapters) and rare
+    procedures cost the remaining 0.8% of medical values. Common diagnoses stay intact, explaining the 58% targeted-attack ceiling
+    (suppressing common conditions would destroy clinical utility). In a 57-patient cohort 50/57 look unique internally, whereas
+    the real attacker must search a voter register 4&ndash;5&times; larger.</li>
+</ul>
 
 <h2>5. Security design</h2>
 <ul>
-  <li><b>Assume the output is breached.</b> It holds no direct identifiers, no birth dates, no raw record numbers and no
-    PII-bearing file or folder names (renamed to <code>doc_&lt;HMAC&gt;</code> / <code>dir_&lt;HMAC&gt;</code>). There is
-    deliberately no re-identification vault: nothing reversible exists to steal.</li>
-  <li><b>Keys.</b> <code>RAKSHA_SECRET</code> lives only in memory; separate HMAC subkeys are derived for fake IDs, date
-    shifts, ID tokens and file names. Without it, fake IDs cannot be inverted (unkeyed hashes, encodings and digit cores
-    are tested) and two releases cannot be linked.</li>
-  <li><b>Logs and errors</b> hold event codes and counts only; exceptions are reported by class name. No values, file
-    names or secrets reach logs, the report, temp files or the home folder (checked by <code>tools/verify.sh</code>).</li>
-  <li><b>Fail closed.</b> Each file runs in its own error boundary; a failure quarantines that file, never releases it.
-    A watchdog keeps the run inside the time budget and the report always matches what is on disk.</li>
+  <li><b>Assume breach — zero reversible state at rest.</b> Released files hold no direct PII, birth dates, raw MRNs or PII
+    paths (renamed to <code>doc_&lt;HMAC&gt;</code> / <code>dir_&lt;HMAC&gt;</code>). Because we store no re-identification vault
+    or lookup table on disk, a breached output server has nothing reversible to steal or decrypt.</li>
+  <li><b>In-memory key separation.</b> <code>RAKSHA_SECRET</code> stays exclusively in RAM and derives isolated
+    <code>HMAC-SHA256</code> subkeys for pseudonyms, date shifts, ID tokens and path hashes — defeating rainbow tables,
+    digit-core leaks and cross-release linkage.</li>
+  <li><b>Zero-PII logs and side channels.</b> Logs emit event codes and integer counts only; exceptions report class names only.
+    <code>input/</code> is read-only and <code>TMPDIR</code>, <code>HOME</code>, stdout/stderr and <code>report.json</code> stay PII-free.</li>
+  <li><b>Fail-closed quarantine &amp; watchdog.</b> Per-file error boundaries quarantine failures into ledger-tracked reasons
+    outside <code>sanitized/</code>; a <code>720 s</code> watchdog guarantees clean completion and disk-to-ledger reconciliation.</li>
 </ul>
 
 <h2>6. Known limitations</h2>
 <ul>
-  <li><b>Rules, not models.</b> A name with no context, in no word list and in a format unlike anything seen could be
-    missed. The scrambled tests and the gate reduce this risk, they do not remove it.</li>
-  <li><b>Targeted attack (58%)</b> remains high because common diagnoses are kept; our attacker is also weaker than the
-    official one on record linkage and the targeted attack, so those two numbers may understate the real risk.</li>
-  <li><b>k=5 cannot be reached</b> on data this small even at district and 20-year bands; rare patients are protected
-    by the rare-value rules instead.</li>
-  <li>PDF, image and XML files are quarantined, not cleaned. A single 25 MB JSON export runs in 104 s but needs 1.6 GB of
-    memory. Ambiguous dates (03/04) rely on the file's own dates or its source's convention.</li>
-  <li><b>Next:</b> context-scored diagnosis generalisation for the targeted attack, and streaming very large files.</li>
+  <li><b>Deterministic rules, zero models:</b> An unlabelled name absent from all context cues and lexicons in an unseen layout
+    could be missed (mitigated by value-based column profiling, chaos testing and the release gate).</li>
+  <li><b>Targeted attack (58%):</b> Remains elevated because common diagnoses are kept; our local attacker is also simpler than
+    the official evaluator on linkage and targeted attacks, so those two figures may understate official risk.</li>
+  <li><b>Small-cohort <code>k=5</code>:</b> Unreachable on 57 patients even at district + 20-year bands; rare-value rules protect outliers instead.</li>
+  <li><b>Binary formats &amp; single giant JSONs:</b> PDF, image and XML files are quarantined rather than OCR/parsed; a single
+    25 MB JSON export finishes in 104 s at 1.6 GB RSS; ambiguous dates (<code>03/04</code>) rely on file/source conventions.</li>
+  <li><b>Next:</b> Context-scored diagnosis generalisation against targeted attacks, and streaming linkage for multi-GB JSONs.</li>
 </ul>
-<p class="small">Everything above is reproducible: <code>tools/verify.sh --submit --scale</code> runs the tests, determinism and
-different-secret checks, the organizers' checks, the scrambled-data leak check, our attacker and the scaling test.</p>
+<div class="small">Reproducible end-to-end via <code>bash tools/verify.sh --submit --scale</code> (354 unit tests, 3-run determinism &amp;
+secret rotation, <code>validate_output.py</code>, <code>check_dev.py</code>, 5-seed chaos mutator, attacker suite and linear scaling check).</div>
 
 </body>
 </html>
