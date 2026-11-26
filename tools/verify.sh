@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Full check before every merge. Usage: tools/verify.sh [--submit] [--seed N]
+# Full check before every merge. Usage: tools/verify.sh [--submit] [--scale] [--seed N]
+#   --scale  also time larger inputs (about two minutes) and check run time grows linearly
 #   KIT_DIR  the organizers' toolkit (default: ../Secret-Wards-ToolKit next to this repo)
 #   PY       Python used to run the pipeline (default: python3)
 set -u
@@ -8,10 +9,11 @@ REPO="$(pwd)"
 KIT="${KIT_DIR:-$REPO/../Secret-Wards-ToolKit}"
 PY="${PY:-python3}"
 TEST_PY="$REPO/.venv/bin/python"; [ -x "$TEST_PY" ] || TEST_PY="$PY"
-SEED=1; SUBMIT=0
+SEED=1; SUBMIT=0; SCALE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --submit) SUBMIT=1 ;;
+    --scale) SCALE=1 ;;
     --seed) SEED="$2"; shift ;;
   esac
   shift
@@ -116,8 +118,26 @@ else
   fail "attacker failed"
 fi
 
+if [ "$SCALE" = "1" ]; then
+  echo "7) Scaling (tools/scale_check.py; full marks at a growth exponent of 1.15 or less)"
+  for args in "--copies 1,4,16" "--bulk-json 20,80"; do
+    # shellcheck disable=SC2086
+    if "$PY" tools/scale_check.py --kit "$KIT" --work "$WORK/scale" $args >"$WORK/scale.txt" 2>&1; then
+      sed 's/^/  /' "$WORK/scale.txt"
+      exponent=$(grep -o "exponent [0-9.]*" "$WORK/scale.txt" | awk '{print $2}')
+      if awk -v e="$exponent" 'BEGIN { exit !(e <= 1.15) }'; then
+        pass "run time grows linearly ($args)"
+      else
+        fail "run time grows faster than linear ($args)"
+      fi
+    else
+      fail "scale check failed ($args)"
+    fi
+  done
+fi
+
 if [ "$SUBMIT" = "1" ]; then
-  echo "7) Submission check"
+  echo "8) Submission check"
   "$PY" "$KIT/check_submission.py" --repo "$REPO" --run | grep -E "❌|⚠️|READY|FIX" | sed 's/^/  /'
 fi
 

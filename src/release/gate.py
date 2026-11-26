@@ -16,6 +16,7 @@ import csv
 import io
 import re
 import unicodedata
+from collections import Counter
 
 from src.ingest import jsontree
 from src.ingest.parsers import ParsedFile
@@ -126,12 +127,18 @@ def leak_targets(parsed: ParsedFile, views) -> tuple[list[tuple[str, str]], dict
                     targets.add(("DIGITS", digits[-10:] if span.type == "PHONE" else digits))
             elif span.type in TEXT_TYPES and len(original) >= 6:
                 targets.add(("TEXT", original))
-    allowed = {}
-    joined = "\n".join(protected_text)
-    for kind, value in targets:
-        if kind == "NAME":
-            allowed[value] = joined.count(_norm(value))
+    names = [value for kind, value in targets if kind == "NAME"]
+    counts = _name_counts("\n".join(protected_text), names)
+    allowed = {value: counts[value] for value in names}
     return sorted(targets), allowed
+
+
+# Each output is read once into an index, so checking a value costs a lookup rather than a scan
+# of the file: a bulk export's targets and length both grow with its row count.
+_LETTER_RUN = re.compile(r"[a-z\u0900-\u097f]+")
+_PLAIN_NAME = re.compile(r"[a-z\u0900-\u097f]+(?: [a-z\u0900-\u097f]+)*")
+_DIGIT_RUN = re.compile(r"\d(?:[ \-./()]{0,2}\d)*")
+_TOKEN_RUN = re.compile(r"[a-z0-9@._+\-/]+")
 
 
 def _name_rx(value: str) -> re.Pattern:
@@ -143,19 +150,76 @@ def _digit_rx(digits: str) -> re.Pattern:
     return re.compile(rf"(?<!\d){body}(?!\d)")
 
 
+def _name_counts(hay: str, names) -> Counter:
+    """Whole-word occurrences of each name in normalised text."""
+    out = Counter()
+    plain = {n: _norm(n) for n in names}
+    lengths = {len(v.split()) for v in plain.values() if _PLAIN_NAME.fullmatch(v)}
+    grams = Counter()
+    if lengths:
+        words = [(m.start(), m.end()) for m in _LETTER_RUN.finditer(hay)]
+        for i in range(len(words)):
+            for k in lengths:
+                j = i + k - 1
+                if j >= len(words):
+                    continue
+                if all(hay[words[t][1]:words[t + 1][0]] == " " for t in range(i, j)):
+                    grams[hay[words[i][0]:words[j][1]]] += 1
+    for name, v in plain.items():
+        out[name] = grams[v] if _PLAIN_NAME.fullmatch(v) else len(_name_rx(name).findall(hay))
+    return out
+
+
+def _digit_index(raw: str, lengths: set[int]) -> set[str]:
+    """Every digit string of the given lengths that the separator-tolerant pattern would match."""
+    found = set()
+    for m in _DIGIT_RUN.finditer(raw):
+        digits, bounds = [], {0}
+        for ch in m.group(0):
+            if ch.isdigit():
+                digits.append(ch)
+            else:
+                bounds.add(len(digits))
+        bounds.add(len(digits))
+        s = "".join(digits)
+        for b in bounds:
+            for n in lengths:
+                if b + n in bounds:
+                    found.add(s[b:b + n])
+    return found
+
+
+def _token_index(hay: str, lengths: set[int]) -> set[str]:
+    found = set()
+    for m in _TOKEN_RUN.finditer(hay):
+        tok = m.group(0)
+        for n in lengths:
+            found.update(tok[i:i + n] for i in range(len(tok) - n + 1))
+    return found
+
+
 def find_leaks(data: bytes, targets, allowed) -> list[tuple[str, str]]:
     text = data.decode("utf-8", errors="replace")
-    hay = _norm(_with_decoded(text))
     raw = _with_decoded(text)
+    hay = _norm(raw)
+    names = [v for k, v in targets if k == "NAME"]
+    digits = [v for k, v in targets if k == "DIGITS"]
+    texts = {v: _norm(v) for k, v in targets if k == "TEXT"}
+    name_counts = _name_counts(hay, names)
+    digit_hits = _digit_index(raw, {len(v) for v in digits})
+    plain_texts = {v: t for v, t in texts.items() if _TOKEN_RUN.fullmatch(t)}
+    token_hits = _token_index(hay, {len(t) for t in plain_texts.values()})
     found = []
     for kind, value in targets:
         if kind == "NAME":
-            if len(_name_rx(value).findall(hay)) > allowed.get(value, 0):
-                found.append((kind, value))
+            hit = name_counts[value] > allowed.get(value, 0)
         elif kind == "DIGITS":
-            if _digit_rx(value).search(raw):
-                found.append((kind, value))
-        elif _norm(value) in hay:
+            hit = value in digit_hits
+        elif value in plain_texts:
+            hit = plain_texts[value] in token_hits
+        else:
+            hit = texts[value] in hay
+        if hit:
             found.append((kind, value))
     return found
 

@@ -6,6 +6,7 @@ patient's name is not overridden by a word-list match.
 """
 from __future__ import annotations
 
+import functools
 import re
 
 from src.core.models import Span
@@ -84,16 +85,20 @@ def complaint_like(rest: str) -> bool:
     return bool(words) and rest[:1].islower()
 
 
-def _eponyms(text: str) -> list[Span]:
-    spans = []
-    names = "|".join(re.escape(e) for e in sorted(vocab.EPONYMS, key=len, reverse=True))
+@functools.lru_cache(maxsize=1)
+def _eponym_rx(eponyms: frozenset) -> re.Pattern | None:
+    names = "|".join(re.escape(e) for e in sorted(eponyms, key=lambda e: (-len(e), e)))
     if not names:
-        return spans
-    rx = re.compile(rf"(?i)\b(?:{names})(?:['’]s|s)?(?:[-\s]+(?:{names})(?:['’]s)?)?\s+{_EPONYM_TAIL}\b"
-                    rf"|(?i:\btetralogy\s+of\s+fallot\b)")
-    for m in rx.finditer(text):
-        spans.append(_keep(m.start(), m.end(), "eponym"))
-    return spans
+        return None
+    return re.compile(rf"(?i)\b(?:{names})(?:['’]s|s)?(?:[-\s]+(?:{names})(?:['’]s)?)?\s+{_EPONYM_TAIL}\b"
+                      rf"|(?i:\btetralogy\s+of\s+fallot\b)")
+
+
+def _eponyms(text: str) -> list[Span]:
+    rx = _eponym_rx(frozenset(vocab.EPONYMS))
+    if rx is None:
+        return []
+    return [_keep(m.start(), m.end(), "eponym") for m in rx.finditer(text)]
 
 
 def find_protected(text: str) -> list[Span]:

@@ -143,6 +143,34 @@ Protection blocks only name and address spans: phone numbers and other identifie
 
 The targeted attack's remaining hits come from common diagnoses that are kept on purpose: once age, gender and district narrow the field, the known condition appears in only one profile. Hiding common diagnoses would cost far more clinical value than it protects.
 
+## Speed and memory
+
+The pipeline runs on one CPU core, with the standard library only. `tools/scale_check.py` builds larger inputs from scrambled copies of the practice data (each copy with new names and numbers) and from the practice bulk export repeated many times, and measures run time and peak memory (Apple M-series laptop):
+
+| Input | Records | Seconds | Peak memory |
+|---|---:|---:|---:|
+| Practice data (200 files) | 815 | 1.4 | 53 MB |
+| 16 scrambled copies | 13,049 | 21 | 287 MB |
+| 32 scrambled copies | 26,107 | 43 | 540 MB |
+| One 4 MB CSV register | 32,000 | 45 | 647 MB |
+| One 25 MB JSON bulk export | 144,000 | 104 | 1.7 GB |
+
+Run time grows linearly with the input (growth exponent 0.99 to 1.03). Work that compares records with each other is indexed: one-word names are only compared with full names sharing a consonant skeleton, records with identical clues are checked for conflicts once, a JSON record's fields are read from its own subtree, and the release gate reads each output once into an index instead of searching it once per identifier. Once a file passes the gate, its parsed copy is dropped. `tools/verify.sh --scale` repeats the measurement and fails if run time grows faster than linear.
+
+## Speed and memory
+
+The pipeline runs on one CPU core, with the standard library only. `tools/scale_check.py` builds larger inputs from scrambled copies of the practice data (each copy with new names and numbers) and from the practice bulk export repeated many times, and measures run time and peak memory (Apple M-series laptop):
+
+| Input | Records | Seconds | Peak memory |
+|---|---:|---:|---:|
+| Practice data (200 files) | 815 | 1.4 | 53 MB |
+| 16 scrambled copies | 13,049 | 21 | 287 MB |
+| 32 scrambled copies | 26,107 | 43 | 540 MB |
+| One 4 MB CSV register | 32,000 | 45 | 647 MB |
+| One 25 MB JSON bulk export | 144,000 | 104 | 1.7 GB |
+
+Run time grows linearly with the input (growth exponent 0.99 to 1.03). Work that compares records with each other is indexed: one-word names are only compared with full names sharing a consonant skeleton, records with identical clues are checked for conflicts once, a JSON record's fields are read from its own subtree, and the release gate reads each output once into an index instead of searching it once per identifier. Once a file passes the gate, its parsed copy is dropped. `tools/verify.sh --scale` repeats the measurement and fails if run time grows faster than linear.
+
 If linking or the privacy plan fails, the run continues: records stay unlinked, or quasi-identifiers are left ungeneralised, but personal data is still removed and the gate still checks every file.
 
 ## How it works
@@ -168,6 +196,8 @@ A single file ledger tracks every input file from start to finish, so no file is
 | `tools/verify.sh` | the full check: tests, repeat-run and different-secret runs, secret and temp-file checks, output contract, quality on practice data and leaks on scrambled data (`--submit` adds the organizers' submission check) |
 | `tools/chaos_mutator.py` | builds a scrambled copy of the practice data, to measure how the system does on names, numbers, labels and formats it was not tuned on |
 | `tools/leak_check.py` | counts how many of the values the scrambler inserted survive in an output |
+| `tools/scale_check.py` | times larger inputs and reports run time, peak memory and how run time grows |
+| `tools/scale_check.py` | times larger inputs and reports run time, peak memory and how run time grows |
 | `tools/attacker_lite.py` | our copy of the published attacker (direct exposure, record linkage, profile pooling, targeted attack, pseudonym inversion, cross-release linking), run on practice data |
 | `src/ingest/` | file walk, format detection from content, encoding rules, parsers, depth-proof JSON |
 | `src/detect/` | identifier and name patterns, the column and field profiler, the detection engine, field and label words |

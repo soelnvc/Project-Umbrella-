@@ -152,9 +152,10 @@ def _detect_table(parsed: ParsedFile) -> dict:
 
 
 # --------------------------------------------------------------------------- json
-def iter_leaves(data):
-    """(path, value) for every scalar leaf, in document order, without recursion."""
-    stack = [((), data)]
+def iter_leaves(data, base: tuple = ()):
+    """(path, value) for every scalar leaf, in document order, without recursion.
+    Paths start with `base`, the location of `data` inside its document."""
+    stack = [(base, data)]
     while stack:
         path, node = stack.pop()
         if isinstance(node, dict):

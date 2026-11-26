@@ -67,6 +67,54 @@ def test_leak_finder_reads_like_the_organizers():
     assert gate.find_leaks(b"schema rams", [("NAME", "Ram")], {}) == []
 
 
+def _scan_reference(data, targets, allowed):
+    """The direct scan the indexed leak finder must agree with."""
+    import re
+    text = data.decode("utf-8", errors="replace")
+    raw = gate._with_decoded(text)
+    hay = gate._norm(raw)
+    found = []
+    for kind, value in targets:
+        if kind == "NAME":
+            hit = len(gate._name_rx(value).findall(hay)) > allowed.get(value, 0)
+        elif kind == "DIGITS":
+            hit = gate._digit_rx(value).search(raw) is not None
+        else:
+            hit = gate._norm(value) in hay
+        if hit:
+            found.append((kind, value))
+    return found
+
+
+def test_indexed_leak_finder_matches_a_direct_scan():
+    import random
+    rng = random.Random(7)
+    words = ["ram", "kumar", "Sita", "devi", "राम", "कुमार", "schema", "rams", "hema"]
+    seps = ["", " ", "-", ".", "  ", " - ", "/", "(", ")", "x", "\n", ", "]
+    for _ in range(400):
+        parts = []
+        for _ in range(rng.randint(1, 12)):
+            r = rng.random()
+            if r < 0.4:
+                parts.append(rng.choice(words))
+            elif r < 0.8:
+                parts.append("".join(rng.choice("0123456789") + rng.choice(seps) for _ in range(rng.randint(1, 12))))
+            else:
+                parts.append(rng.choice(["a.b@x.in", "ABCDE1234F", "pol/2026-77", "abcde1234fz"]))
+            parts.append(rng.choice([" ", "  ", ", ", "\n", "", "-"]))
+        text = "".join(parts)
+        digits = "".join(c for c in text if c.isdigit())
+        targets = [("NAME", "Ram Kumar"), ("NAME", "राम कुमार"), ("NAME", "Hema"), ("NAME", "Sita Devi"),
+                   ("TEXT", "ABCDE1234F"), ("TEXT", "a.b@x.in"), ("TEXT", "pol/2026-77")]
+        for _ in range(3):
+            if len(digits) >= 6:
+                i = rng.randint(0, len(digits) - 6)
+                targets.append(("DIGITS", digits[i:i + rng.randint(6, min(12, len(digits) - i))]))
+        allowed = {"Ram Kumar": rng.randint(0, 1)}
+        data = text.encode()
+        assert sorted(gate.find_leaks(data, targets, allowed)) == sorted(_scan_reference(data, targets, allowed)), text
+
+
 def test_repair_removes_plain_leaks():
     fixed = gate.repair(b"Ram Kumar, ph 98765 43210", [("NAME", "Ram Kumar"), ("DIGITS", "9876543210")])
     assert fixed == b"[NAME], ph [ID]"

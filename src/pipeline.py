@@ -123,6 +123,7 @@ def run(inp: Path, out: Path) -> int:
     parsed_files: dict[int, ParsedFile] = {}
     sources: dict[int, Path] = {}
     staged: dict[int, bytes] = {}
+    entity_counts: dict[int, Counter] = {}
     used_paths: set[str] = set()
 
     # Pass 1: ingest and detect. Files are only read here; nothing is written yet.
@@ -204,6 +205,10 @@ def run(inp: Path, out: Path) -> int:
                 continue
             staged[e.file_id] = data
             ledger.advance(e, "verified")
+            parsed = parsed_files[e.file_id]
+            entity_counts[e.file_id] = engine.entity_counts(parsed, resolve)
+            # The output bytes are final; only the records are needed from here on.
+            parsed.spans, parsed.rows, parsed.data, parsed.text = {}, [], None, ""
         safety.log("gate", round=round_no + 1, refused=refused)
         if not refused or watchdog.expired():
             break
@@ -232,7 +237,7 @@ def run(inp: Path, out: Path) -> int:
 
     entities = Counter()
     for entry in ledger.released():
-        entities += engine.entity_counts(parsed_files[entry.file_id], resolve)
+        entities += entity_counts[entry.file_id]
 
     counts = ledger.counts()
     counts.update({

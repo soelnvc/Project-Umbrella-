@@ -75,10 +75,18 @@ def _name_link(a: RecordClues, b: RecordClues) -> bool:
     return False
 
 
+def _conflict_key(r: RecordClues) -> tuple:
+    """Everything conflict() reads: records with the same key conflict with exactly the same records."""
+    unique = frozenset((k, v) for k, v in r.ids if k in UNIQUE_IDS)
+    return (r.gender, r.dob, tuple(sorted(r.birth_years)), unique,
+            tuple((k, tuple(t)) for k, t in r.relatives), tuple(tuple(n) for n in r.names))
+
+
 class _Clusters:
     def __init__(self, records: list[RecordClues]):
         self.parent = list(range(len(records)))
-        self.members = {i: [i] for i in range(len(records))}
+        # One representative per distinct set of clues; a bulk export repeats the same clues often.
+        self.members = {i: {_conflict_key(r): i} for i, r in enumerate(records)}
         self.records = records
 
     def find(self, i: int) -> int:
@@ -91,14 +99,15 @@ class _Clusters:
         ri, rj = self.find(i), self.find(j)
         if ri == rj:
             return True
-        for x in self.members[ri]:
-            for y in self.members[rj]:
+        for x in self.members[ri].values():
+            for y in self.members[rj].values():
                 if conflict(self.records[x], self.records[y], strict):
                     return False
         if rj < ri:
             ri, rj = rj, ri
         self.parent[rj] = ri
-        self.members[ri].extend(self.members.pop(rj))
+        for key, idx in self.members.pop(rj).items():
+            self.members[ri].setdefault(key, idx)
         return True
 
 
@@ -115,9 +124,10 @@ def link(records: list[RecordClues]) -> list[int | None]:
     for (kind, value), members in sorted(by_id.items()):
         if len(members) < 2:
             continue
-        if kind in SHARED_IN_HOUSEHOLDS and any(conflict(records[a], records[b])
-                                                for a in members for b in members if a < b):
-            continue
+        if kind in SHARED_IN_HOUSEHOLDS:
+            distinct = list({_conflict_key(records[m]): m for m in reversed(members)}.values())
+            if any(conflict(records[a], records[b]) for a in distinct for b in distinct if a < b):
+                continue
         if kind not in STRONG and kind not in SHARED_IN_HOUSEHOLDS:
             continue
         rank = 0 if kind in STRONG else 1
@@ -167,16 +177,25 @@ def _link_single_names(records: list[RecordClues], eligible: list[int], clusters
     Linked only when exactly one existing patient group fits, so two people who share a first
     name and a village are never merged.
     """
+    # names_match needs equal consonant skeletons, so only full names sharing one can fit.
+    by_skeleton: dict[str, set[int]] = defaultdict(set)
+    for j in eligible:
+        b = records[j]
+        if b.names and max(len(n) for n in b.names) >= 2:
+            for tokens in b.names:
+                for t in tokens:
+                    by_skeleton[phonetic.skeleton(t)].add(j)
     for i in eligible:
         a = records[i]
         if not a.names or max(len(n) for n in a.names) > 1:
             continue
+        candidates = set().union(*(by_skeleton.get(phonetic.skeleton(t), set()) for n in a.names for t in n))
         fits = set()
-        for j in eligible:
+        for j in sorted(candidates):
             if i == j:
                 continue
             b = records[j]
-            if not b.names or max(len(n) for n in b.names) < 2 or not _village_age_match(a, b):
+            if not _village_age_match(a, b):
                 continue
             if any(phonetic.names_match(x, y) for x in a.names for y in b.names):
                 fits.add(clusters.find(j))

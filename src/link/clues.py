@@ -82,8 +82,16 @@ def record_fields(parsed: ParsedFile, loc: str) -> list[tuple[tuple, str, str]]:
         return out
     if parsed.fmt in ("json", "fhir"):
         prefix = () if loc == "doc" else _pointer(loc)
-        for path, value in iter_leaves(parsed.data):
-            if path[:len(prefix)] != prefix or isinstance(value, bool):
+        node = parsed.data
+        for step in prefix:
+            if isinstance(step, int) and isinstance(node, list) and step < len(node):
+                node = node[step]
+            elif isinstance(step, str) and isinstance(node, dict) and step in node:
+                node = node[step]
+            else:
+                return out
+        for path, value in iter_leaves(node, prefix):
+            if isinstance(value, bool):
                 continue
             if isinstance(value, (str, int)):
                 keys = [p for p in path if isinstance(p, str)]
