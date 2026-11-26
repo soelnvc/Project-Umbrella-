@@ -226,8 +226,7 @@ def extract(parsed: ParsedFile, loc: str, sha256: str, conv: str) -> RecordClues
                 d = dates.parse(stripped, conv)
                 if d:
                     event_dates.append(d)
-            if vocab.has(low_hint, frozenset(), frozenset({"age", "umar", "umr", "aayu", "आयु", "उम्र"})) or \
-                    low_hint.endswith("age"):
+            if vocab.has(low_hint.split("/")[-1], frozenset(), frozenset({"age", "umar", "umr", "aayu", "आयु", "उम्र"})):
                 m = re.match(r"^\s*(\d{1,3})", stripped.translate(dates._DIGITS))
                 if m:
                     rc.birth_years.append((int(m.group(1)), -1))

@@ -190,11 +190,13 @@ def test_iterative_parser_rejects_malformed_input(bad):
 
 
 def test_deep_json_round_trip_without_recursion():
-    data = jsontree._loads_iterative(_deep(3000))
+    raw = _deep(3000)
+    data = jsontree._loads_iterative(raw)
     for pretty in (False, True):
         text = jsontree._dumps_iterative(data, pretty)
-        assert jsontree._loads_iterative(text) == data
-    assert jsontree._dumps_iterative(data, False) == _deep(3000)
+        reloaded = jsontree._loads_iterative(text)
+        assert jsontree._dumps_iterative(reloaded, False) == raw
+    assert jsontree._dumps_iterative(data, False) == raw
 
 
 def test_iterative_writer_matches_the_standard_library():

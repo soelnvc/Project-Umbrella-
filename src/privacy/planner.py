@@ -12,6 +12,7 @@ get rare diagnoses replaced by their ICD-10 chapter and the discharge date moved
 from __future__ import annotations
 
 import datetime as dt
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
@@ -56,6 +57,11 @@ class Profile:
 
 
 # --------------------------------------------------------------------------- bands
+# Escalation only widens band width (5 -> 10 -> 20); offset tiers (steps 2 and 4) are used only
+# inside _band() when a patient's recorded ages straddle a boundary.
+_NEXT_WIDTH_STEP = {0: 1, 1: 3, 2: 3}
+
+
 def _band(ages: list[int], step: int, top: int) -> str | None:
     """The narrowest band on the ladder, at or after `step`, that holds every age."""
     if not ages:
@@ -64,10 +70,13 @@ def _band(ages: list[int], step: int, top: int) -> str | None:
     ladder = [(5, 0), (10, 0), (10, 5), (20, 0), (20, 10)]
     for width, offset in ladder[step:]:
         start = ((lo - offset) // width) * width + offset
-        if hi < start + width:
-            if start + width - 1 >= top:
+        end = start + width - 1
+        if start < 0:
+            start, end = 0, width - 1
+        if hi <= end:
+            if end >= top:
                 return f"{min(start, top)}+"
-            return f"{start}-{start + width - 1}"
+            return f"{start}-{end}"
     return f"{(lo // 10) * 10}+"
 
 
@@ -173,10 +182,10 @@ def plan(files, record_clues: dict, keys: Keys, policy: dict) -> dict:
     proc_count = Counter(x for p in profiles.values() for x in p.procedures)
     stay_count = Counter(s for p in profiles.values() for s in p.stays)
     text_chapter: dict[str, tuple[str, str]] = {}
-    for code, texts in code_texts.items():
+    for code in sorted(code_texts):
         ch = icd.chapter(code)
         if ch:
-            for t in texts:
+            for t in sorted(code_texts[code]):
                 text_chapter.setdefault(t, ch)
     for p in profiles.values():
         p.rare_codes = {c for c in p.codes if code_count[c] <= rare_max}
@@ -190,7 +199,7 @@ def plan(files, record_clues: dict, keys: Keys, policy: dict) -> dict:
         if jitter_on and p.high_risk and p.stays:
             p.jitter = 1
 
-    max_band = max(base_band, {5: 0, 10: 2, 20: 4}.get(int(policy.get("age_escalation_max", 10)), 2))
+    max_band = max(base_band, {5: 0, 10: 1, 20: 3}.get(int(policy.get("age_escalation_max", 10)), 1))
     max_geo = GEO_LEVELS.index(policy.get("geo_escalation_max", "district"))
     escalated, below_k = _escalate(profiles, k, top, max_band, max_geo)
     generalized = 0
@@ -263,7 +272,7 @@ def _escalate(profiles: dict, k: int, top: int, max_band: int, max_geo: int) -> 
             if p.geo_level < min(1, max_geo) and p.district:
                 p.geo_level += 1
             elif p.band_step < max_band:
-                p.band_step += 1
+                p.band_step = min(max_band, _NEXT_WIDTH_STEP.get(p.band_step, max_band))
             elif p.geo_level < max_geo:
                 p.geo_level += 1
             else:
@@ -341,13 +350,12 @@ def _apply(parsed, per_field, prof: Profile, band: str | None, chapters_on: bool
                 changed = True
         if chapters_on and prof.rare_texts:
             low = text.lower()
-            for rare in sorted(prof.rare_texts, key=len, reverse=True):
+            for rare in sorted(prof.rare_texts, key=lambda s: (-len(s), s)):
                 ch = text_chapter.get(rare)
-                start = low.find(rare)
-                while start >= 0:
-                    spans.append(_replace(start, start + len(rare), ch[1] if ch else WITHHELD))
+                rx = re.compile(rf"(?<![a-z0-9\u0900-\u097f]){re.escape(rare)}(?![a-z0-9\u0900-\u097f])")
+                for m in rx.finditer(low):
+                    spans.append(_replace(m.start(), m.end(), ch[1] if ch else WITHHELD))
                     changed = True
-                    start = low.find(rare, start + len(rare))
         for span in resolve(spans, text):
             if span.type == "VILLAGE" and address[0] != "text" and span.source in ("field", "fhir"):
                 span.action, span.replacement = "replace", place or "[VILLAGE]"

@@ -52,7 +52,7 @@ def seeds(views: dict, spans_by_field: dict, resolve) -> dict[str, str]:
 def matcher(found: dict[str, str]):
     if not found:
         return None
-    alternation = "|".join(re.escape(t) for t in sorted(found, key=len, reverse=True))
+    alternation = "|".join(re.escape(t) for t in sorted(found, key=lambda t: (-len(t), t)))
     return re.compile(rf"(?<![A-Za-z{DEVA_LETTERS}])(?:{alternation})(?![A-Za-z{DEVA_LETTERS}])", re.IGNORECASE)
 
 
@@ -87,7 +87,7 @@ def id_cores(views: dict, spans_by_field: dict, resolve) -> set[str]:
 def core_matcher(cores: set[str]):
     if not cores:
         return None
-    return re.compile(r"(?<!\d)(?:" + "|".join(sorted(cores, key=len, reverse=True)) + r")(?!\d)")
+    return re.compile(r"(?<!\d)(?:" + "|".join(sorted(cores, key=lambda s: (-len(s), s))) + r")(?!\d)")
 
 
 def find_cores(text: str, rx) -> list[Span]:

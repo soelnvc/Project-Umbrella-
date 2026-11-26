@@ -50,10 +50,27 @@ def _date_context(hint: str, text: str, start: int) -> str:
     return "other"
 
 
+_AGE_TOKENS = frozenset({"age", "umar", "umr", "aayu", "आयु", "उम्र"})
+_NON_AGE_PARENT = frozenset({"duration", "history", "medication", "medications", "rx", "treatment",
+                             "dose", "dosage", "course", "smoking", "exposure", "followup", "follow_up"})
+_AGE_ONLY_VALUE = re.compile(r"^\s*(\d{1,3})\s*(?:y(?:rs?|ears?)?\.?|वर्ष|साल)?\s*$", re.IGNORECASE)
+
+
 def _age_hint(hint: str) -> bool:
-    last = hint.split("/")[-1]
-    return vocab.has(last, frozenset(), frozenset({"age", "umar", "umr", "aayu", "आयु", "उम्र", "years"})) \
-        or last.lower().endswith("age")
+    parts = [p for p in hint.split("/") if p]
+    if not parts:
+        return False
+    last = parts[-1]
+    if vocab.has(last, frozenset(), _AGE_TOKENS):
+        return True
+    if last.lower() == "years":
+        parent = parts[-2].lower() if len(parts) >= 2 else ""
+        return parent not in _NON_AGE_PARENT and not vocab.has(parent, vocab.NONPERSON_STEMS, vocab.NONPERSON_TOKENS)
+    return False
+
+
+def _valid_age(value: int) -> bool:
+    return 0 <= value <= 115
 
 
 def field_mentions(hint: str, text: str, conv: str, fhir_type: str | None = None) -> list[Mention]:
@@ -64,13 +81,17 @@ def field_mentions(hint: str, text: str, conv: str, fhir_type: str | None = None
     stripped = text.strip()
     lead = len(text) - len(text.lstrip())
     if _age_hint(hint):
-        m = re.match(r"\s*(\d{1,3})(?!\d)", text)
+        m = _AGE_ONLY_VALUE.match(text) if last == "years" else re.match(r"\s*(\d{1,3})(?!\d)", text)
         if m and not _AGE_SEX.match(text):
-            out.append(Mention(m.start(1), m.end(1), "age", int(m.group(1))))
+            val = int(m.group(1))
+            if _valid_age(val):
+                out.append(Mention(m.start(1), m.end(1), "age", val))
     for rx in (_AGE_SEX, _AGE_LABEL, _AGE_OLD):
         for m in rx.finditer(text):
             group = "age2" if rx is _AGE_LABEL and m.group("age") is None else "age"
-            out.append(Mention(m.start(group), m.end(group), "age", int(m.group(group))))
+            val = int(m.group(group))
+            if _valid_age(val):
+                out.append(Mention(m.start(group), m.end(group), "age", val))
     if stripped and vocab.has(last, ("tehsil", "taluka")) or last.endswith("block"):
         if stripped:
             out.append(Mention(lead, lead + len(stripped), "tehsil", stripped))

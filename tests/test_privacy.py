@@ -113,3 +113,51 @@ def test_json_age_number_becomes_a_band(tmp_path, monkeypatch):
     age = json.loads((out / "sanitized/p.json").read_text())["patients"][0]["age"]
     lo, hi = map(int, age.split("-"))
     assert lo <= 51 <= hi
+
+
+@pytest.mark.parametrize("age", [0, 2, 4, 6, 9])
+@pytest.mark.parametrize("step", [0, 1, 2, 3, 4])
+def test_child_age_bands_are_never_negative(age, step):
+    out = _band([age], step, 90)
+    assert not out.startswith("-")
+    lo, hi = map(int, out.split("-"))
+    assert 0 <= lo <= age <= hi
+
+
+def test_child_patient_gets_valid_band_end_to_end(tmp_path, monkeypatch):
+    monkeypatch.setenv("RAKSHA_SECRET", "s")
+    inp = tmp_path / "in"
+    inp.mkdir()
+    (inp / "r.csv").write_text("UHID,Patient Name,Gender,Age,District\nSNJ/26/000001,Aarav Patel,M,4,Lucknow\n")
+    out = tmp_path / "out"
+    assert pipeline.run(inp, out) == 0
+    row = next(csv.DictReader(io.StringIO((out / "sanitized/r.csv").read_text())))
+    assert row["Age"] == "0-19"
+
+
+def test_clinical_fields_ending_in_age_or_duration_years_are_not_banded(tmp_path, monkeypatch):
+    monkeypatch.setenv("RAKSHA_SECRET", "s")
+    inp = tmp_path / "in"
+    inp.mkdir()
+    payload = {"patients": [{"uhid": "DHH2026-084999", "name": "Ravi Kumar", "age": 48, "gender": "M",
+                             "dosage": "500 mg", "stage": 3, "percentage": 85, "duration": {"years": 5}}]}
+    (inp / "p.json").write_text(json.dumps(payload))
+    out = tmp_path / "out"
+    assert pipeline.run(inp, out) == 0
+    rec = json.loads((out / "sanitized/p.json").read_text())["patients"][0]
+    assert rec["dosage"] == "500 mg" and rec["stage"] == 3 and rec["percentage"] == 85
+    assert rec["duration"]["years"] == 5
+    lo, hi = map(int, rec["age"].split("-"))
+    assert lo <= 48 <= hi and hi - lo + 1 <= 20
+
+
+def test_rare_diagnosis_replacement_respects_word_boundaries(tmp_path, monkeypatch):
+    monkeypatch.setenv("RAKSHA_SECRET", "s")
+    inp = tmp_path / "in"
+    inp.mkdir()
+    (inp / "d.txt").write_text(
+        "Patient Name: Ravi Kumar\nUHID: SNJ/26/000001\nDiagnosis: Mass (R22.9)\nNotes: massive improvement.\n")
+    out = tmp_path / "out"
+    assert pipeline.run(inp, out) == 0
+    note = (out / "sanitized/d.txt").read_text()
+    assert "massive improvement." in note and "R00-R99" in note
