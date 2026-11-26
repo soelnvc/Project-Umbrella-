@@ -7,7 +7,7 @@ These apply to every change, by a person or a coding assistant.
 - No network calls during the run. No writes to the input folder, `TMPDIR` or `HOME`.
 - Never print, log or write data values, input file names or `RAKSHA_SECRET`. Logs hold event codes and counts only. Exceptions are reported by class name only.
 - No practice-data names, hospital names, ID prefixes or header strings as detection rules. Detection must work on formats it has never seen.
-- The practice answer key (`truth.json`) is for testing only. Pipeline code never reads it.
+- The practice answer key (`truth.json`) is for testing only. Pipeline code never reads it. Test tools may read it, but must never create, copy or rewrite an answer key.
 
 ## How the code is organised
 - Stages mark spans; only the span writer in `src/rewrite/` changes text.

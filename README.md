@@ -61,11 +61,20 @@ A single file ledger tracks every input file from start to finish, so no file is
 | `src/pipeline.py` | runs the passes |
 | `src/core/` | shared data shapes, file ledger, secret handling, policy reader, safety shell |
 | `tests/` | automated tests (`pip install -r requirements-dev.txt`, then `python3 -m pytest`) |
+| `tools/verify.sh` | the full check: tests, repeat-run and different-secret runs, secret and temp-file checks, output contract, quality on practice data and leaks on scrambled data (`--submit` adds the organizers' submission check) |
+| `tools/chaos_mutator.py` | builds a scrambled copy of the practice data, to measure how the system does on names, numbers, labels and formats it was not tuned on |
+| `tools/leak_check.py` | counts how many of the values the scrambler inserted survive in an output |
 | `src/ingest/` | file walk, format detection from content, encoding rules, parsers, depth-proof JSON |
 | `src/rewrite/` | writing each file back in its original format as UTF-8 |
 | `src/baseline.py` | temporary cleaning from the organizers' starter, replaced by the detection stages |
 | `config/policy.yaml` | privacy settings |
 | `raksha.toml` | how the organizers set up and run the submission |
+
+## Testing on unseen formats
+
+Hidden evaluation data uses names, labels and formats that never appear in the practice data. `tools/chaos_mutator.py` imitates that: it swaps every patient and relative name for new ones (consistently in Latin and Devanagari, including inside file names, JSON keys, metadata, base64 attachments and escaped text), replaces phone, Aadhaar and other ID numbers with new ones in new formats, gives hospital IDs new prefixes, renames CSV headers, JSON keys and free-text labels into other English, Hinglish and Hindi forms, and changes date formats.
+
+The organizers' practice answer key is only read, to know where the personal values are; no answer key is created or changed. The scrambler records the values it inserted, and `tools/leak_check.py` counts how many survive in an output, reading text the way the organizers' checker does (normalised, with base64 decoded and numbers matched across separators). `tools/verify.sh` first checks that every inserted value is visible in an untouched copy of the scrambled input, so the leak check is calibrated before it is trusted.
 
 ## Security
 
