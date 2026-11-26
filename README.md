@@ -32,6 +32,15 @@ The run needs no internet. `RAKSHA_SECRET` keys the fake patient IDs and date sh
 
 Files that cannot be processed safely are never copied. They are listed in the report as quarantined with a fixed reason code.
 
+## Reading files
+
+- **Format from content, not the file name.** PDF, image and archive signatures, and markup such as XML, are set aside as `unsupported_format`. A JSON file with a `.csv` name is read and written as JSON.
+- **Encodings, in order:** UTF-8 byte-order mark, UTF-16 (with or without a mark), strict UTF-8, then cp1252 only for genuine legacy exports. A file with damaged bytes (stray encoding markers, mixed encodings, replacement or control characters) is set aside as `invalid_encoding` rather than half-read, since damaged text can hide a name from detection.
+- **Tables:** the delimiter is detected (comma, tab, semicolon, pipe). Multi-line cells and ragged rows are kept. Rows whose values look shifted by an unescaped delimiter are flagged so every cell in them is scanned.
+- **JSON at any depth:** the standard parser is used first; an iterative parser, writer and tree walk take over for deeply nested files, so a 1,500-level export is cleaned instead of crashing.
+- **Records:** CSV and TSV rows are `row:N`. A JSON file that describes one patient at its top level is one `doc` record; otherwise each top-level list whose items carry patient fields gives one record per item (`/visits/3`). FHIR Bundles and text notes are one `doc` record.
+- **Output:** every file is written back in its own format as UTF-8, keeping its delimiter, header, line endings and UTF-8 byte-order mark.
+
 ## How it works
 
 The pipeline runs in five passes:
@@ -52,7 +61,9 @@ A single file ledger tracks every input file from start to finish, so no file is
 | `src/pipeline.py` | runs the passes |
 | `src/core/` | shared data shapes, file ledger, secret handling, policy reader, safety shell |
 | `tests/` | automated tests (`pip install -r requirements-dev.txt`, then `python3 -m pytest`) |
-| `src/baseline.py` | temporary processing from the organizers' starter, replaced stage by stage |
+| `src/ingest/` | file walk, format detection from content, encoding rules, parsers, depth-proof JSON |
+| `src/rewrite/` | writing each file back in its original format as UTF-8 |
+| `src/baseline.py` | temporary cleaning from the organizers' starter, replaced by the detection stages |
 | `config/policy.yaml` | privacy settings |
 | `raksha.toml` | how the organizers set up and run the submission |
 

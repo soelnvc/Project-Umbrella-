@@ -28,6 +28,8 @@ class Ledger:
     def advance(self, entry: FileEntry, state: str) -> None:
         if entry.state in ("quarantined", "suppressed"):
             return
+        if state in ("quarantined", "suppressed"):
+            raise ValueError("use quarantine() or suppress()")
         if STATES.index(state) < STATES.index(entry.state):
             raise ValueError("ledger state cannot move backwards")
         entry.state = state

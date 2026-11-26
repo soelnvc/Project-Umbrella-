@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from src import baseline, pipeline
+from src import pipeline
 from src.core import safety
 
 CANARY = "Zorvanth Kelmiqui"
@@ -46,14 +46,14 @@ def test_exception_hook_prints_class_name_only(capsys):
 
 
 def test_crash_quarantines_only_that_file_and_leaks_nothing(input_dir, tmp_path, monkeypatch, capfd):
-    real = baseline.process
+    real = pipeline.parse
 
     def crashing(in_rel, raw):
         if in_rel.endswith("b.txt"):
             raise ValueError(f"cannot parse {raw.decode()}")
         return real(in_rel, raw)
 
-    monkeypatch.setattr(baseline, "process", crashing)
+    monkeypatch.setattr(pipeline, "parse", crashing)
     out = tmp_path / "out"
     assert pipeline.run(input_dir, out) == 0
 
