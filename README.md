@@ -1,4 +1,4 @@
-# RakshaWall
+# Umbrella
 
 An offline, CPU-only, LLM-free privacy firewall for multilingual Indian hospital records (English, Hindi and Hinglish), built for Track 3 "Secret Wards" by team **JenSON**: Siddhesh Goel (leader), Krishna Bhatia and Nithin Jagganatham.
 
@@ -134,7 +134,7 @@ If linking or the privacy plan fails, the run continues: records stay unlinked, 
 
 `tools/attacker_lite.py` follows the organizers' published attack description: it reads each record as field and value pairs, filters the practice voter register by phone, email, district, gender, age, birth year, tehsil, village and PIN (skipping a filter that would empty the list), weights the remaining people by name, relative and house-number matches, pools records that share a fake ID or reference number, and tries known visit dates, conditions and stay lengths. It scores itself with the practice answer key (read only) and divides by the organizers' published results on the raw data, as the scorer does. On the raw practice data it re-identifies the same share of patients as the organizers' attacker (97.9%); it is weaker on record linkage and the targeted attack, so those two numbers understate the real risk.
 
-| Attack (practice data) | Raw data | RakshaWall |
+| Attack (practice data) | Raw data | Umbrella |
 |---|---:|---:|
 | Direct exposure | 100% | 0% |
 | Record linkage (mean probability on the true person) | 92% | 5% |

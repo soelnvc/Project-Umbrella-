@@ -1,8 +1,8 @@
 [submission]
-name  = "team-rakshawall"
+name  = "jenson-umbrella"
 setup = "pip install -r requirements.txt"
 run   = "python3 main.py --input {input} --output {output}"
 
 [submission.env]
-RAKSHAWALL_POLICY = "config/policy.yaml"
+UMBRELLA_POLICY = "config/policy.yaml"
 PYTHONDONTWRITEBYTECODE = "1"

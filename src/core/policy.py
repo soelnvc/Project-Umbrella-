@@ -25,7 +25,7 @@ def _value(text: str):
 
 def load_policy(path: Path | None = None) -> dict:
     if path is None:
-        path = ROOT / os.environ.get("RAKSHAWALL_POLICY", "config/policy.yaml")
+        path = ROOT / os.environ.get("UMBRELLA_POLICY", "config/policy.yaml")
     policy: dict = {}
     if path.is_file():
         for line in path.read_text(encoding="utf-8").splitlines():

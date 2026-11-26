@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RakshaWall entry point: python3 main.py --input <dir> --output <dir>"""
+"""Umbrella entry point: python3 main.py --input <dir> --output <dir>"""
 from __future__ import annotations
 
 import argparse
@@ -13,7 +13,7 @@ from src.pipeline import run  # noqa: E402
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="RakshaWall privacy firewall")
+    ap = argparse.ArgumentParser(description="Umbrella privacy firewall")
     ap.add_argument("--input", required=True)
     ap.add_argument("--output", required=True)
     a = ap.parse_args()

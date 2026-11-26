@@ -70,7 +70,7 @@ def test_crash_quarantines_only_that_file_and_leaks_nothing(input_dir, tmp_path,
 def test_watchdog_quarantines_unprocessed_files_and_still_reports(input_dir, tmp_path, monkeypatch):
     policy = tmp_path / "policy.yaml"
     policy.write_text("time_budget_seconds: 0\n", encoding="utf-8")
-    monkeypatch.setenv("RAKSHAWALL_POLICY", str(policy))
+    monkeypatch.setenv("UMBRELLA_POLICY", str(policy))
     out = tmp_path / "out"
     assert pipeline.run(input_dir, out) == 0
 

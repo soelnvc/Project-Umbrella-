@@ -20,7 +20,7 @@ while [ $# -gt 0 ]; do
 done
 
 # Outside the repo, so test files (such as the scrambled PDF) never look like submission files.
-WORK="${VERIFY_DIR:-${TMPDIR:-/tmp}/rakshawall-verify}"
+WORK="${VERIFY_DIR:-${TMPDIR:-/tmp}/umbrella-verify}"
 rm -rf "$WORK"; mkdir -p "$WORK"
 FAILS=0
 pass() { echo "  PASS  $1"; }

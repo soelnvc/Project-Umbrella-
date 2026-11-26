@@ -1,4 +1,4 @@
-# RakshaWall privacy settings. Flat "key: value" lines; lists are comma-separated.
+# Umbrella privacy settings. Flat "key: value" lines; lists are comma-separated.
 k_anonymity: 5
 age_band_years: 10
 age_ladder: 5,10,10o,20
