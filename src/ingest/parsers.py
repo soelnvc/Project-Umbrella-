@@ -30,6 +30,8 @@ class ParsedFile:
     pretty: bool = True
     text: str = ""
     records: list[Record] = field(default_factory=list)
+    spans: dict = field(default_factory=dict)          # field address -> list[Span]
+    field_types: dict = field(default_factory=dict)    # column or JSON path -> profiler type
 
 
 def _extension(in_rel: str) -> str:

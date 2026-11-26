@@ -41,6 +41,17 @@ Files that cannot be processed safely are never copied. They are listed in the r
 - **Records:** CSV and TSV rows are `row:N`. A JSON file that describes one patient at its top level is one `doc` record; otherwise each top-level list whose items carry patient fields gives one record per item (`/visits/3`). FHIR Bundles and text notes are one `doc` record.
 - **Output:** every file is written back in its own format as UTF-8, keeping its delimiter, header, line endings and UTF-8 byte-order mark.
 
+## Detection
+
+Detection only marks spans of text; a single writer (`src/rewrite/spans.py`) resolves overlaps (longest span first, then priority) and applies every replacement once.
+
+- **Identifiers everywhere:** Aadhaar (any separators, masked forms), ABHA numbers and addresses, PAN, email, insurance numbers, and phones in any common Indian format (+91, leading 0, 5-5, 3-3-4, brackets, landlines, masked), including Devanagari and Arabic-Indic digits. Hospital record numbers are found by shape (a letter prefix and digit groups with at least five digits), not by known prefixes, so new hospitals are covered. Medical codes such as package codes (`MG006A`), ICD codes, LOINC codes, doses, lab values and dates are not touched.
+- **Columns and JSON fields by their values:** each CSV column and JSON field is classified from its values (identifier shapes, name shapes, relation markers such as `S/o`, doctor prefixes), with the field name used only as a hint in English, Hinglish and Hindi. A JSON field's own key decides first; a parent key helps only when the field's key says nothing (`name.first`) or describes a relative (`guardian.name`). Columns that cannot be classified are still scanned as free text.
+- **FHIR:** names, phone numbers and identifiers of `Patient` and `RelatedPerson` resources are removed, `subject.display` is treated as the patient's name, and names of practitioners and organisations are kept.
+- **Labelled names in free text:** a name after a label such as `Name:`, `Patient Name:`, `नाम:`, `मरीज़ का नाम:` or `Rogi ka naam:` is removed; `Attendant:` and similar labels mark a relative. Labels for doctors (`Consultant:`, `Referred by:`) and for things that are not people (`Hospital Name:`, `Test Name:`) are left alone. `C/O` counts as "care of" only before a capitalised name; `C/O fever` is a complaint and `H/O` is always medical history.
+- **Replacements:** typed placeholders (`[NAME]`, `[RELATIVE]`, `[PHONE]`, `[AADHAAR]`, `[ABHA]`, `[PAN]`, `[EMAIL]`, `[INSURANCE_ID]`). Hospital record and visit numbers become keyed tokens (`ID-XXXXXXXX`, HMAC with a subkey of `RAKSHA_SECRET`), so the same number maps to the same token in every file without being reversible. No partial digits are kept. An identifier stored as a JSON number becomes `0`, keeping the type.
+- **Word lists** (`config/lexicons/`): common Indian given names and surnames in Latin and Devanagari, used only as supporting evidence for unlabelled columns.
+
 ## How it works
 
 The pipeline runs in five passes:
@@ -65,8 +76,9 @@ A single file ledger tracks every input file from start to finish, so no file is
 | `tools/chaos_mutator.py` | builds a scrambled copy of the practice data, to measure how the system does on names, numbers, labels and formats it was not tuned on |
 | `tools/leak_check.py` | counts how many of the values the scrambler inserted survive in an output |
 | `src/ingest/` | file walk, format detection from content, encoding rules, parsers, depth-proof JSON |
-| `src/rewrite/` | writing each file back in its original format as UTF-8 |
-| `src/baseline.py` | temporary cleaning from the organizers' starter, replaced by the detection stages |
+| `src/detect/` | identifier and name patterns, the column and field profiler, the detection engine, field and label words |
+| `src/rewrite/` | the span writer, applying spans to fields, writing each file back in its original format |
+| `config/lexicons/` | common Indian name lists in Latin and Devanagari |
 | `config/policy.yaml` | privacy settings |
 | `raksha.toml` | how the organizers set up and run the submission |
 
@@ -74,7 +86,7 @@ A single file ledger tracks every input file from start to finish, so no file is
 
 Hidden evaluation data uses names, labels and formats that never appear in the practice data. `tools/chaos_mutator.py` imitates that: it swaps every patient and relative name for new ones (consistently in Latin and Devanagari, including inside file names, JSON keys, metadata, base64 attachments and escaped text), replaces phone, Aadhaar and other ID numbers with new ones in new formats, gives hospital IDs new prefixes, renames CSV headers, JSON keys and free-text labels into other English, Hinglish and Hindi forms, and changes date formats.
 
-The organizers' practice answer key is only read, to know where the personal values are; no answer key is created or changed. The scrambler records the values it inserted, and `tools/leak_check.py` counts how many survive in an output, reading text the way the organizers' checker does (normalised, with base64 decoded and numbers matched across separators). `tools/verify.sh` first checks that every inserted value is visible in an untouched copy of the scrambled input, so the leak check is calibrated before it is trusted.
+The organizers' practice answer key is only read, to know where the personal values are; no answer key is created or changed. Replacement names are never taken from the practice data or from the pipeline's own name lists (unused names are invented, in both scripts), so the scrambled run measures detection without help from those lists. The scrambler records the values it inserted, and `tools/leak_check.py` counts how many survive in an output, reading text the way the organizers' checker does (normalised, with base64 decoded and numbers matched across separators). `tools/verify.sh` first checks that every inserted value is visible in an untouched copy of the scrambled input, so the leak check is calibrated before it is trusted.
 
 ## Security
 

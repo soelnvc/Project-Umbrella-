@@ -44,6 +44,8 @@ SURNAMES = [
     ("Kesarwani", "केसरवानी"), ("Bhatnagar", "भटनागर"), ("Sengar", "सेंगर"), ("Tomar", "तोमर"),
 ]
 
-# Syllables for canary replacements: names that should exist in no name list.
-CANARY_SYLLABLES = ["vre", "kon", "tal", "dus", "mir", "zeph", "qua", "lorn", "bex", "thra", "vul",
-                    "ozz", "kre", "nym", "pla", "drov", "sku", "yel", "jorv", "wix"]
+# Syllables, as (Latin, Devanagari) pairs, for invented names that exist in no name list.
+SYLLABLES = [("vi", "वि"), ("ran", "रन"), ("tal", "ताल"), ("dus", "दुस"), ("mir", "मिर"), ("ke", "के"),
+             ("sho", "शो"), ("lan", "लन"), ("bi", "बि"), ("thra", "थ्रा"), ("vul", "वुल"), ("roh", "रोह"),
+             ("kre", "क्रे"), ("nim", "निम"), ("pal", "पल"), ("dro", "द्रो"), ("sku", "स्कु"), ("yel", "येल"),
+             ("jor", "जोर"), ("vik", "विक"), ("har", "हर"), ("nu", "नु"), ("zo", "ज़ो"), ("gan", "गन")]

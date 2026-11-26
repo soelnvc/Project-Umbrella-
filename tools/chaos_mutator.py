@@ -32,8 +32,9 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 sys.dont_write_bytecode = True
 
-from names_pool import CANARY_SYLLABLES, GIVEN_FEMALE, GIVEN_MALE, SURNAMES  # noqa: E402
+from names_pool import GIVEN_FEMALE, GIVEN_MALE, SURNAMES, SYLLABLES  # noqa: E402
 
+from src.detect.vocab import ALL_NAMES  # noqa: E402
 from src.ingest import jsontree  # noqa: E402
 
 NAME_TYPES = ("PATIENT_NAME", "RELATIVE_NAME", "CANARY")
@@ -179,18 +180,25 @@ def build_name_maps(truth: dict, rng: random.Random):
                                         e.get("role"), gender if e.get("role") == "patient" else "M",
                                         e.get("person"), e["type"], i, len(toks)))
 
-    practice_tokens = {o[0] for o in occurrences}
-    pools = {
-        "M": [p for p in GIVEN_MALE if p[0].casefold() not in practice_tokens and p[1] not in practice_tokens],
-        "F": [p for p in GIVEN_FEMALE if p[0].casefold() not in practice_tokens and p[1] not in practice_tokens],
-        "S": [p for p in SURNAMES if p[0].casefold() not in practice_tokens and p[1] not in practice_tokens],
-    }
+    # New names must be unseen: not in the practice data and not in the pipeline's name lists,
+    # so the scrambled test measures detection without help from those lists.
+    excluded = {o[0] for o in occurrences} | ALL_NAMES
+
+    def fresh(pairs):
+        return [p for p in pairs if p[0].casefold() not in excluded and p[1] not in excluded]
+
+    pools = {"M": fresh(GIVEN_MALE), "F": fresh(GIVEN_FEMALE), "S": fresh(SURNAMES)}
     for pool in pools.values():
         rng.shuffle(pool)
+    used: set[str] = set()
 
     def invented() -> tuple[str, str]:
-        word = "".join(rng.choice(CANARY_SYLLABLES) for _ in range(rng.choice((2, 3))))
-        return (word.capitalize(), word.capitalize())
+        while True:
+            parts = [rng.choice(SYLLABLES) for _ in range(rng.choice((2, 3)))]
+            latin = "".join(p[0] for p in parts).capitalize()
+            if latin.casefold() not in excluded and latin not in used:
+                used.add(latin)
+                return (latin, "".join(p[1] for p in parts))
 
     def draw(kind: str) -> tuple[str, str]:
         return pools[kind].pop() if pools[kind] else invented()

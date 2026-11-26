@@ -5,16 +5,19 @@ import hashlib
 import json
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
-from src import baseline
 from src.core import safety
 from src.core.ledger import Ledger
 from src.core.policy import load_policy
 from src.core.secret import MissingSecret, load_keys
+from src.detect import engine
 from src.ingest.parsers import ParsedFile, parse
 from src.ingest.walker import walk
+from src.rewrite.apply import apply
 from src.rewrite.serialize import serialize
+from src.rewrite.spans import resolve
 
 
 def _peak_rss_mb() -> float:
@@ -26,8 +29,14 @@ def _peak_rss_mb() -> float:
         return 0.0
 
 
-def _build(parsed: ParsedFile) -> bytes:
-    baseline.clean(parsed)
+def _read(in_rel: str, raw: bytes) -> ParsedFile:
+    parsed = parse(in_rel, raw)
+    engine.detect(parsed)
+    return parsed
+
+
+def _build(parsed: ParsedFile, keys) -> bytes:
+    apply(parsed, keys)
     return serialize(parsed)
 
 
@@ -41,7 +50,6 @@ def run(inp: Path, out: Path) -> int:
         return 2
     policy = load_policy()
     watchdog = safety.Watchdog(policy.get("time_budget_seconds", 720))
-    del keys  # used by the linking and privacy passes once they exist
 
     ledger = Ledger()
     parsed_files: dict[int, ParsedFile] = {}
@@ -54,7 +62,7 @@ def run(inp: Path, out: Path) -> int:
         if watchdog.expired():
             ledger.quarantine(entry, "time_budget")
             continue
-        ok, parsed = safety.guarded(ledger, entry, parse, in_rel, raw)
+        ok, parsed = safety.guarded(ledger, entry, _read, in_rel, raw)
         if not ok:
             continue
         for record in parsed.records:
@@ -67,7 +75,7 @@ def run(inp: Path, out: Path) -> int:
 
     # Pass 4: build each output in memory. The release gate (Step 12) will check it here.
     for entry in ledger.pending():
-        ok, data = safety.guarded(ledger, entry, _build, parsed_files[entry.file_id])
+        ok, data = safety.guarded(ledger, entry, _build, parsed_files[entry.file_id], keys)
         if ok:
             staged[entry.file_id] = data
             ledger.advance(entry, "verified")
@@ -94,10 +102,14 @@ def run(inp: Path, out: Path) -> int:
         for r in records:
             f.write(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n")
 
+    entities = Counter()
+    for entry in ledger.released():
+        entities += engine.entity_counts(parsed_files[entry.file_id], resolve)
+
     counts = ledger.counts()
     counts.update({
         "records_processed": len(records),
-        "identifiers_detected": sum(baseline.entities.values()),
+        "identifiers_detected": sum(entities.values()),
         "records_linked": sum(r["patient"] is not None for r in records),
         "records_generalized": 0,
         "records_suppressed": 0,
@@ -109,7 +121,7 @@ def run(inp: Path, out: Path) -> int:
         "schema": "raksha-report/1",
         "files": ledger.report_files(),
         "counts": {k: counts[k] for k in order},
-        "entities": dict(sorted(baseline.entities.items())),
+        "entities": dict(sorted(entities.items())),
         "timing": {"seconds": round(time.monotonic() - t0, 2)},
         "resources": {"peak_rss_mb": _peak_rss_mb()},
     }
