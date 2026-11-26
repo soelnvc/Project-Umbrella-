@@ -2,7 +2,8 @@
 
 1. It must parse in its own format and be valid UTF-8.
 2. Its shape must match the input: CSV rows and cells, JSON structure and value types (an age
-   becoming a band is the one allowed type change), FHIR structure, text line count.
+   becoming a band, and a FHIR value replaced by the standard "masked" marker, are the allowed
+   changes), FHIR structure, text line count.
 3. None of the file's own detected identifiers or full names may remain, read the way the
    organizers read output (normalised, base64 decoded, digits across separators). A name may
    remain as often as it appeared inside protected text (a doctor sharing a relative's name).
@@ -19,6 +20,7 @@ import unicodedata
 from src.ingest import jsontree
 from src.ingest.parsers import ParsedFile
 from src.release import fhir_check
+from src.rewrite.apply import is_data_absent
 from src.rewrite.spans import resolve
 
 NAME_TYPES = ("PATIENT_NAME", "RELATIVE_NAME")
@@ -52,7 +54,9 @@ def shape(parsed: ParsedFile) -> list:
         stack = [parsed.data]
         while stack:
             node = stack.pop()
-            if isinstance(node, dict):
+            if is_data_absent(node):
+                out.append("str")
+            elif isinstance(node, dict):
                 out.append(("dict", len(node)))
                 stack.extend(reversed(list(node.values())))
             elif isinstance(node, list):

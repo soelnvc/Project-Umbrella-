@@ -1,6 +1,6 @@
 # RakshaWall privacy settings. Flat "key: value" lines; lists are comma-separated.
 k_anonymity: 5
-age_band_years: 5
+age_band_years: 10
 age_ladder: 5,10,10o,20
 age_top_code: 90
 extreme_age_high: 85
@@ -8,11 +8,11 @@ extreme_age_low: 5
 geo_default: tehsil
 geo_ladder: tehsil,district,withheld
 geo_escalation_max: district
-age_escalation_max: 10
+age_escalation_max: 20
 pin_mode: prefix3
 date_shift_min_days: 30
 date_shift_max_days: 180
-dob_mode: shift
+dob_mode: withhold
 rare_condition_max_profiles: 3
 rare_los_hospital_max_profiles: 3
 rare_condition_action: icd_chapter

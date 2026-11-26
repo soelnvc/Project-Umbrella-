@@ -40,6 +40,22 @@ def test_format_check_needs_the_same_shape():
     assert not gate.check_format(txt, gate.shape(txt), b"line one line two\n")
 
 
+def test_withheld_fhir_birth_date_uses_the_standard_marker(tmp_path, monkeypatch):
+    monkeypatch.setenv("RAKSHA_SECRET", "s")
+    inp = tmp_path / "in"
+    (inp / "fhir").mkdir(parents=True)
+    bundle = _bundle(birthDate="1977-04-12", gender="male",
+                     name=[{"text": "Mahesh Chauhan"}],
+                     identifier=[{"system": "uhid", "value": "SNJ/26/064127"}])
+    (inp / "fhir" / "b.json").write_text(json.dumps(bundle))
+    out = tmp_path / "out"
+    assert pipeline.run(inp, out) == 0
+    released = next(p for p in (out / "sanitized").rglob("*.json"))
+    patient = json.loads(released.read_text())["entry"][0]["resource"]
+    assert "birthDate" not in patient and patient["_birthDate"]["extension"][0]["valueCode"] == "masked"
+    assert fhir_check.problems(json.loads(released.read_text())) == []
+
+
 def test_leak_finder_reads_like_the_organizers():
     targets = [("NAME", "Ram Kumar"), ("DIGITS", "9876543210")]
     assert gate.find_leaks(b"seen by [NAME]", targets, {}) == []

@@ -6,6 +6,17 @@ from src.detect.channels import key_token
 from src.ingest.parsers import ParsedFile
 from src.rewrite.spans import apply_text, resolve
 
+DATA_ABSENT_URL = "http://hl7.org/fhir/StructureDefinition/data-absent-reason"
+
+
+def data_absent() -> dict:
+    """FHIR's standard marker for a value withheld on purpose (written as `_field`)."""
+    return {"extension": [{"url": DATA_ABSENT_URL, "valueCode": "masked"}]}
+
+
+def is_data_absent(node) -> bool:
+    return node == data_absent()
+
 
 def _get_json(data, path: tuple):
     node = data
@@ -31,7 +42,7 @@ def _rename_key(data, parent_path: tuple, old: str, new: str) -> None:
 
 
 def apply(parsed: ParsedFile, keys: Keys) -> None:
-    key_renames = []
+    key_renames, masked = [], []
     for address, spans in parsed.spans.items():
         kind = address[0]
         if kind == "cell":
@@ -42,7 +53,9 @@ def apply(parsed: ParsedFile, keys: Keys) -> None:
         elif kind == "json":
             path = address[1]
             current = _get_json(parsed.data, path)
-            if isinstance(current, str):
+            if any(s.action == "absent" for s in spans) and isinstance(path[-1], str):
+                masked.append(path)
+            elif isinstance(current, str):
                 _set_json(parsed.data, path, apply_text(current, spans, keys))
             elif any(s.action == "zero" for s in spans):
                 _set_json(parsed.data, path, 0)
@@ -57,5 +70,8 @@ def apply(parsed: ParsedFile, keys: Keys) -> None:
                 key_renames.append((parent_path, key, key_token(keys, token_kind, key)))
         elif kind == "text":
             parsed.text = apply_text(parsed.text, spans, keys)
+    for path in masked:
+        _set_json(parsed.data, path, data_absent())
+        _rename_key(parsed.data, path[:-1], path[-1], "_" + path[-1])
     for parent_path, old, new in sorted(key_renames, key=lambda r: -len(r[0])):
         _rename_key(parsed.data, parent_path, old, new)

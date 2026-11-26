@@ -94,10 +94,11 @@ On the practice data: precision 1.00, recall 0.98, no two people merged; both sa
 
 `src/privacy/` decides one treatment per patient and applies it in every record of that patient (a linked patient, or a single unlinked record that holds patient data). Settings are in `config/policy.yaml`.
 
-- **Dates:** each patient gets one shift of 30 to 180 days, earlier or later, from a keyed HMAC (subkey of `RAKSHA_SECRET`). Every date of the patient moves by it, including dates of birth, so intervals and stay lengths stay exact, and a different secret gives different shifts. Each date keeps its own format (order, separators, padding, month names, two-digit years). Day-first or month-first is decided per file; a file whose own dates cannot decide inherits the convention of its source (files sharing a hospital word, hospital name or record-number prefix).
-- **Ages:** one band per patient that holds every age the patient has in any record (5-year, then 10-year, 10-year offset by five, 20-year), top-coded at 90+. Ages in age fields, `52 Yrs/F`, `आयु: 39 वर्ष` and `65/F` are all replaced with the same band.
+- **Dates:** each patient gets one shift of 30 to 180 days, earlier or later, from a keyed HMAC (subkey of `RAKSHA_SECRET`). Every date of the patient moves by it, so intervals and stay lengths stay exact, and a different secret gives different shifts. A shifted date never lands on a real birth date written in the same file.
+- **Dates of birth** are withheld (`[DOB]`; in FHIR, the standard `data-absent-reason` "masked" marker in place of `birthDate`). A shifted birth date keeps the birth year, which pins the age far tighter than any band: on the practice data it let our attacker re-identify 69% of patients from pooled records, against 15% with it withheld (`dob_mode` in the policy; `shift` is still available). Each date keeps its own format (order, separators, padding, month names, two-digit years). Day-first or month-first is decided per file; a file whose own dates cannot decide inherits the convention of its source (files sharing a hospital word, hospital name or record-number prefix).
+- **Ages:** one band per patient that holds every age the patient has in any record: 10-year bands, then 10-year offset by five, then 20-year bands for small groups, top-coded at 90+. Ages in age fields, `52 Yrs/F`, `आयु: 39 वर्ष` and `65/F` are all replaced with the same band.
 - **Place:** village fields become the patient's tehsil (district for escalated patients); village mentions in free text stay `[VILLAGE]`; PIN codes keep three digits.
-- **Look-alike groups:** patients are grouped by gender, age band and place; a group smaller than k (5) is escalated, place first (tehsil to district), then the age band (to 10 years). Escalation stops there: k is counted over the patients in the data, while the attacker's population register is several times larger.
+- **Look-alike groups:** patients are grouped by gender, age band and place; a group smaller than k (5) is escalated, place first (tehsil to district), then the age band (to 20 years). Escalation stops there: k is counted over the patients in the data, while the attacker's population register is several times larger.
 - **High-risk patients:** a diagnosis or procedure held by three or fewer patients (the attacker's rarity rule), a stay length held by three or fewer patients, or an age of 85+ or 5 or under. Their rare diagnoses become the ICD-10 chapter (code and wording, in every record, including history lines such as `K/C/O addison's disease`); rare procedures become `Procedure (details withheld)`; their discharge dates move by one extra day, so an exact stay length no longer matches.
 
 ## The clinical shield
@@ -127,6 +128,21 @@ Protection blocks only name and address spans: phone numbers and other identifie
 - **One repair, then quarantine:** leftover plain text is replaced once and the file is checked again. If it still fails, it is quarantined with `leak_check_failed` or `format_check_failed`.
 - **Re-planning:** when a file is quarantined, the remaining files are read again from the input, and linking and the privacy plan are redone without it (at most three rounds, `replan_max_rounds`), so look-alike groups and links describe only what is released.
 
+## Measured privacy
+
+`tools/attacker_lite.py` follows the organizers' published attack description: it reads each record as field and value pairs, filters the practice voter register by phone, email, district, gender, age, birth year, tehsil, village and PIN (skipping a filter that would empty the list), weights the remaining people by name, relative and house-number matches, pools records that share a fake ID or reference number, and tries known visit dates, conditions and stay lengths. It scores itself with the practice answer key (read only) and divides by the organizers' published results on the raw data, as the scorer does. On the raw practice data it re-identifies the same share of patients as the organizers' attacker (97.9%); it is weaker on record linkage and the targeted attack, so those two numbers understate the real risk.
+
+| Attack (practice data) | Raw data | RakshaWall |
+|---|---:|---:|
+| Direct exposure | 100% | 0% |
+| Record linkage (mean probability on the true person) | 92% | 5% |
+| Patients re-identified from pooled records | 98% | 15% |
+| Targeted attack with known facts | 100% | 57% |
+| Fake IDs reversed | | 0% |
+| Fake IDs or shifted dates stable under another secret | | 0% |
+
+The targeted attack's remaining hits come from common diagnoses that are kept on purpose: once age, gender and district narrow the field, the known condition appears in only one profile. Hiding common diagnoses would cost far more clinical value than it protects.
+
 If linking or the privacy plan fails, the run continues: records stay unlinked, or quasi-identifiers are left ungeneralised, but personal data is still removed and the gate still checks every file.
 
 ## How it works
@@ -152,6 +168,7 @@ A single file ledger tracks every input file from start to finish, so no file is
 | `tools/verify.sh` | the full check: tests, repeat-run and different-secret runs, secret and temp-file checks, output contract, quality on practice data and leaks on scrambled data (`--submit` adds the organizers' submission check) |
 | `tools/chaos_mutator.py` | builds a scrambled copy of the practice data, to measure how the system does on names, numbers, labels and formats it was not tuned on |
 | `tools/leak_check.py` | counts how many of the values the scrambler inserted survive in an output |
+| `tools/attacker_lite.py` | our copy of the published attacker (direct exposure, record linkage, profile pooling, targeted attack, pseudonym inversion, cross-release linking), run on practice data |
 | `src/ingest/` | file walk, format detection from content, encoding rules, parsers, depth-proof JSON |
 | `src/detect/` | identifier and name patterns, the column and field profiler, the detection engine, field and label words |
 | `src/link/` | transliteration, phonetic name keys, date reading, linking clues, clustering, fake IDs and their placement |

@@ -100,6 +100,8 @@ def plan(files, record_clues: dict, keys: Keys, policy: dict) -> dict:
     jitter_on = bool(policy.get("los_jitter_high_risk", False))
     chapters_on = policy.get("rare_condition_action", "icd_chapter") == "icd_chapter"
     procedures_on = bool(policy.get("rare_procedure_generalize", True))
+    dob_withheld = policy.get("dob_mode", "shift") == "withhold"
+    base_band = {5: 0, 10: 1, 20: 3}.get(int(policy.get("age_band_years", 5)), 0)
 
     profiles: dict[tuple, Profile] = {}
     record_mentions = {}
@@ -182,10 +184,11 @@ def plan(files, record_clues: dict, keys: Keys, policy: dict) -> dict:
         extreme = bool(p.ages) and (max(p.ages) >= old or min(p.ages) <= young)
         p.high_risk = bool(p.rare_codes or p.rare_procedures or rare_stay or extreme)
         p.shift = _shift_days(keys, p.anchor, low, high)
+        p.band_step = base_band
         if jitter_on and p.high_risk and p.stays:
             p.jitter = 1
 
-    max_band = {5: 0, 10: 2, 20: 4}.get(int(policy.get("age_escalation_max", 10)), 2)
+    max_band = max(base_band, {5: 0, 10: 2, 20: 4}.get(int(policy.get("age_escalation_max", 10)), 2))
     max_geo = GEO_LEVELS.index(policy.get("geo_escalation_max", "district"))
     escalated, below_k = _escalate(profiles, k, top, max_band, max_geo)
     generalized = 0
@@ -193,7 +196,7 @@ def plan(files, record_clues: dict, keys: Keys, policy: dict) -> dict:
         band = _band(prof.ages, prof.band_step, top)
         for parsed, loc in prof.records:
             changed = _apply(parsed, record_mentions[(id(parsed), loc)], prof, band,
-                             chapters_on, procedures_on, text_chapter, birth_dates[id(parsed)])
+                             chapters_on, procedures_on, text_chapter, birth_dates[id(parsed)], dob_withheld)
             generalized += changed
     return {"profiles": len(profiles), "records_generalized": generalized,
             "high_risk": sum(p.high_risk for p in profiles.values()), "escalated": escalated,
@@ -276,7 +279,7 @@ def _shifted(original: str, conv: str, new: dt.date, taken: set[str]) -> str:
 
 
 def _apply(parsed, per_field, prof: Profile, band: str | None, chapters_on: bool, procedures_on: bool,
-           text_chapter: dict, taken: set[str]) -> int:
+           text_chapter: dict, taken: set[str], dob_withheld: bool = False) -> int:
     conv = clue_mod.file_convention(parsed)
     changed = False
     place = _place_text(prof)
@@ -284,7 +287,15 @@ def _apply(parsed, per_field, prof: Profile, band: str | None, chapters_on: bool
         spans = parsed.spans.setdefault(address, [])
         for m in found:
             original = text[m.start:m.end]
-            if m.kind == "date":
+            if m.kind == "date" and m.context == "dob" and dob_withheld:
+                # A birth year pins the age far tighter than any band, so the date is withheld.
+                if parsed.fmt == "fhir" and address[0] == "json" and text.strip() == original.strip():
+                    spans.append(Span(view=-1, start=0, end=len(text), type="QUASI", role="patient",
+                                      action="absent", source="privacy", priority=70))
+                else:
+                    spans.append(_replace(m.start, m.end, "[DOB]"))
+                changed = True
+            elif m.kind == "date":
                 days = prof.shift + (prof.jitter if m.context == "discharge" else 0)
                 spans.append(_replace(m.start, m.end,
                                       _shifted(original, conv, m.value + dt.timedelta(days=days), taken)))

@@ -109,8 +109,15 @@ if [ -d "$WORK/chaos_out" ]; then
   "$PY" tools/leak_check.py --inserted "$CHAOS/inserted.json" --output "$WORK/chaos_out" | sed 's/^/  /'
 fi
 
+echo "6) Attacks on practice data (our attacker, tools/attacker_lite.py)"
+if "$PY" tools/attacker_lite.py --kit "$KIT" --output "$WORK/a" --other "$WORK/c" >"$WORK/attack.txt" 2>&1; then
+  sed 's/^/  /' "$WORK/attack.txt"
+else
+  fail "attacker failed"
+fi
+
 if [ "$SUBMIT" = "1" ]; then
-  echo "6) Submission check"
+  echo "7) Submission check"
   "$PY" "$KIT/check_submission.py" --repo "$REPO" --run | grep -E "❌|⚠️|READY|FIX" | sed 's/^/  /'
 fi
 

@@ -82,14 +82,14 @@ def test_one_shift_per_patient_keeps_intervals_and_bands_ages(tmp_path, monkeypa
     out = _run(tmp_path, monkeypatch)
     row = next(csv.DictReader(io.StringIO((out / "sanitized/registration/r.csv").read_text())))
     note = (out / "sanitized/discharge/d.txt").read_text()
-    assert row["Age"] in ("45-49", "40-49", "45-54") and row["Age"] in note
+    lo, hi = map(int, row["Age"].split("-"))
+    assert lo <= 48 <= hi and hi - lo + 1 >= 10 and row["Age"] in note
     assert row["Gaon"] == "Lalganj" or row["Gaon"] == "Rae Bareli"
+    assert row["DOB"] == "[DOB]"
     reg = dates.parse(row["Reg Date"], "dmy")
-    dob = dates.parse(row["DOB"], "dmy")
     found = {m.context: m.value for m in field_mentions("", note, "dmy") if m.kind == "date"}
     shift = (reg - dt.date(2025, 6, 30)).days
     assert 30 <= abs(shift) <= 180
-    assert (dob - dt.date(1977, 4, 12)).days == shift
     assert (found["admission"] - dt.date(2026, 2, 7)).days == shift
     assert (found["discharge"] - found["admission"]).days in (12, 13)
 
