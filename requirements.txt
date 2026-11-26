@@ -1,0 +1,2 @@
+# Runtime dependencies. The pipeline currently uses only the Python standard library.
+# Planned: regex, rapidfuzz, cryptography (pinned when they are first used).
