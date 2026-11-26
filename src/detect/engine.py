@@ -358,10 +358,10 @@ def detect(parsed: ParsedFile, keys: Keys | None = None) -> None:
         spans = free_text_spans(parsed.text)
         if spans:
             parsed.spans[("text",)] = spans
-    found, rx = _spread_names(parsed, views)
+    found, rx, core_rx = _spread_names(parsed, views)
     parsed.name_matcher = rx
     if keys is not None:
-        _clean_encoded(parsed, views, found, rx, keys)
+        _clean_encoded(parsed, views, found, rx, core_rx, keys)
 
 
 def _add(parsed: ParsedFile, address_key, text: str, extra: list[Span]) -> None:
@@ -380,7 +380,7 @@ def _spread_names(parsed: ParsedFile, views: dict):
     rx = propagate.matcher(found)
     core_rx = propagate.core_matcher(cores)
     if rx is None and core_rx is None:
-        return found, rx
+        return found, rx, core_rx
     for address_key, text in views.items():
         if address_key[0] == "jsonkey" and not (" " in text.strip() or text[:1].isupper()):
             continue
@@ -391,25 +391,38 @@ def _spread_names(parsed: ParsedFile, views: dict):
         if core_rx is not None:
             extra += propagate.find_cores(view.text, core_rx)
         _add(parsed, address_key, text, view.to_original(extra))
-    return found, rx
+    return found, rx, core_rx
 
 
-def clean_text_with(found: dict, rx, keys: Keys):
+_ENCODED_DOB = re.compile(
+    r"(?i)(?:dob|d\.o\.b\.?|date\s+of\s+birth|birth\s*date|जन्म\s*तिथि)\s*[:\-]?\s*"
+    r"(?P<dt>\d{1,4}[-/.]\d{1,2}[-/.]\d{2,4}|\d{1,2}[-/ .][A-Za-z]{3,9}[-/ .,]*\d{2,4}|"
+    r"[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{2,4})")
+
+
+def clean_text_with(found: dict, rx, keys: Keys, core_rx=None):
     from src.rewrite.spans import apply_text
 
     def clean(text: str) -> str:
         view = normalize.View(text)
-        extra = view.to_original(propagate.find(view.text, rx, found)) if rx is not None else []
-        return apply_text(text, free_text_spans(text) + extra, keys)
+        extra = []
+        if rx is not None:
+            extra += propagate.find(view.text, rx, found)
+        if core_rx is not None:
+            extra += propagate.find_cores(view.text, core_rx)
+        for m in _ENCODED_DOB.finditer(view.text):
+            extra.append(Span(view=-1, start=m.start("dt"), end=m.end("dt"), type="QUASI", role="patient",
+                              action="replace", source="encoded_dob", priority=70, replacement="[DOB]"))
+        return apply_text(text, free_text_spans(text) + view.to_original(extra), keys)
     return clean
 
 
-_MAYBE_ENCODED = re.compile(r"[A-Za-z0-9+/]{16,}|[0-9A-Fa-f]{24,}")
+_MAYBE_ENCODED = re.compile(r"[A-Za-z0-9+/=]{16,}|[A-Za-z0-9_-]{16,}|[0-9A-Fa-f]{20,}")
 
 
-def _clean_encoded(parsed: ParsedFile, views: dict, found: dict, rx, keys: Keys) -> None:
+def _clean_encoded(parsed: ParsedFile, views: dict, found: dict, rx, core_rx, keys: Keys) -> None:
     """Decode, clean and re-encode base64 and hex payloads, using this file's names too."""
-    clean = clean_text_with(found, rx, keys)
+    clean = clean_text_with(found, rx, keys, core_rx=core_rx)
     for address_key, text in views.items():
         if not _MAYBE_ENCODED.search(text):
             continue

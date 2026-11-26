@@ -84,6 +84,9 @@ def test_clinical_and_common_text_is_untouched(text):
      "पता: [ADDRESS], ग्राम [VILLAGE], तहसील कादीपुर, जिला सुल्तानपुर - 228***"),
     ("मकान नं. 32, जामा मस्जिद के पीछे, तहसील नवाबगंज", "[ADDRESS], [ADDRESS], तहसील नवाबगंज"),
     ("PIN Code: 226001", "PIN Code: 226***"),
+    ("पिन कोड: २२६००१", "पिन कोड: 226***"),
+    ("Address: Flat No. A-203, Shastri Nagar, Distt. Ambedkar Nagar",
+     "Address: [ADDRESS], [ADDRESS], Distt. Ambedkar Nagar"),
 ])
 def test_addresses(text, expected):
     assert clean(text) == expected

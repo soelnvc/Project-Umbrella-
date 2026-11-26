@@ -28,6 +28,7 @@ def run_file(name: str, raw: bytes):
 @pytest.mark.parametrize("phone", [
     "9876543210", "+91 98765 43210", "+91-9876543210", "098765-43210", "98765-43210", "98765 43210",
     "(987) 654-3210", "987-654-3210", "+919876543210", "०९८७६५४३२१०"[1:], "0522-2345678",
+    "+91 (987) 654-3210", "98XXX-XX210", "+91 XXXXX 43210", "••••••4321",
 ])
 def test_phone_formats(phone):
     assert clean(f"Call {phone} today") == "Call [PHONE] today"
@@ -38,13 +39,15 @@ def test_phone_formats(phone):
     ("XXXX XXXX 5866", "[AADHAAR]"), ("91-7938-3729-8403", "[ABHA]"), ("ravi.k@abdm", "[ABHA]"),
     ("FEAPC0181I", "[PAN]"), ("ravi.kumar@example.com", "[EMAIL]"), ("PMJAY-UP-8758791961", "[INSURANCE_ID]"),
     ("POL/44/22262805", "[INSURANCE_ID]"), ("98XXXXXX10", "[PHONE]"),
+    ("1234 5678-9012", "[AADHAAR]"), ("XX-XXXX-XXXX-1234", "[ABHA]"),
 ])
 def test_identifier_shapes(value, expected):
     assert clean(f"id {value} end") == f"id {expected} end"
 
 
 @pytest.mark.parametrize("mrn", ["SNJ/26/064127", "JJH-0077305", "UHID-010610", "IPD-2026-00432",
-                                 "ADM000161", "DHH-IPD-00591", "DHH2026-084999", "KXF/26/064127"])
+                                 "ADM000161", "DHH-IPD-00591", "DHH2026-084999", "KXF/26/064127",
+                                 "uhid-2025-00412", "PATIENT-001234", "UP-LKO-JJH-001234"])
 def test_hospital_numbers_become_keyed_tokens(mrn):
     out = clean(f"UHID {mrn}.")
     assert out.startswith("UHID ID-") and mrn not in out

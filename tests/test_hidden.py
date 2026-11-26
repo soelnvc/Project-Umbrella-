@@ -33,6 +33,11 @@ def clean_file(name: str, text: str) -> str:
     ("Mobile 98765\u200b43210", "Mobile [PHONE]"),
     ("Name: Rаvi Kumar", "Name: [NAME]"),                    # Cyrillic а
     ("Mobile ９８７６５４３２１０", "Mobile [PHONE]"),           # full-width digits
+    ("Name: Ravi\u00a0Kumar", "Name: [NAME]"),               # raw NBSP
+    ("Name: \U0001d411\U0001d41a\U0001d42f\U0001d422 \U0001d40a\U0001d42e\U0001d426\U0001d41a\U0001d42b",
+     "Name: [NAME]"),                                         # mathematical bold Unicode
+    ("Name: Rāvi Śarmā", "Name: [NAME]"),                    # Latin diacritics
+    (r"Name: \u0930\u0935\u093f \u0915\u0941\u092e\u093e\u0930", "Name: [NAME]"),  # literal \uXXXX
 ])
 def test_disguised_personal_data_is_found(text, expected):
     assert clean(text) == expected
@@ -78,6 +83,24 @@ def test_names_in_an_attachment_use_the_files_own_names():
     data = json.loads(clean_file("fhir/b.json", json.dumps(bundle)))
     decoded = base64.b64decode(data["entry"][1]["resource"]["content"][0]["attachment"]["data"]).decode()
     assert "Shabana" not in decoded
+
+
+def test_encoded_pure_letter_pure_digit_and_dob_payloads():
+    # Pure-letter base64 (no digits, +, /) + seed name from the same file
+    pure_letters = base64.b64encode(b"Asha Devi Sharma").decode()
+    assert not any(c in "0123456789+/" for c in pure_letters)
+    doc = {"patient_name": "Asha Devi Sharma", "attachment": {"data": pure_letters}}
+    out = json.loads(clean_file("misc/c.json", json.dumps(doc)))
+    assert "Asha" not in base64.b64decode(out["attachment"]["data"]).decode()
+
+    # Pure-digit phone in base64 + DOB inside base64
+    phone_b64 = base64.b64encode(b"9876543210").decode()
+    out_p = json.loads(clean_file("misc/p.json", json.dumps({"attachment": {"data": phone_b64}})))
+    assert base64.b64decode(out_p["attachment"]["data"]).decode() == "[PHONE]"
+
+    dob_b64 = base64.b64encode(b"Name: Ravi Kumar\nDOB: 12/04/1977\n").decode()
+    out_d = json.loads(clean_file("misc/d.json", json.dumps({"attachment": {"data": dob_b64}})))
+    assert base64.b64decode(out_d["attachment"]["data"]).decode() == "Name: [NAME]\nDOB: [DOB]\n"
 
 
 # --------------------------------------------------------------------------- keys, headers, paths

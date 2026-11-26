@@ -16,21 +16,25 @@ P_PHONE = 45
 P_ID = 40            # generic hospital or insurance number shape
 P_LABEL = 30         # a name after a label
 
-_ABHA = re.compile(r"(?<![\d])\d{2}([ \-]?)\d{4}\1\d{4}\1\d{4}(?![\d])")
-_AADHAAR = re.compile(r"(?<![\d])\d{4}([ \-.]?)\d{4}\1\d{4}(?![\d])")
-_AADHAAR_MASKED = re.compile(r"(?<![\w*])(?:[Xx*•]{4}[ \-]?){2}\d{4}(?![\d])")
+_ABHA = re.compile(r"(?<![\d])\d{2}([ \-.]?)\d{4}\1\d{4}\1\d{4}(?![\d])")
+_ABHA_MASKED = re.compile(r"(?<![\w*•])[Xx*•]{2}[ \-.]?[Xx*•]{4}[ \-.]?[Xx*•]{4}[ \-.]?\d{4}(?![\d])")
+_AADHAAR = re.compile(r"(?<![\d])(?:\d{12}|\d{4}[ \-.]\d{4}[ \-.]\d{4})(?![\d])")
+_AADHAAR_MASKED = re.compile(r"(?<![\w*•])(?:[Xx*•]{4}[ \-.]?){2}\d{4}(?![\d])")
 _PAN = re.compile(r"(?<![A-Za-z0-9])[A-Z]{5}\d{4}[A-Z](?![A-Za-z0-9])")
 _ABHA_ADDRESS = re.compile(r"(?<![\w.@])[A-Za-z0-9][\w.]{2,}@(?:abdm|sbx|ndhm)(?![\w.])", re.IGNORECASE)
 _EMAIL = re.compile(r"(?<![\w.+-])[A-Za-z0-9][\w.+-]*@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+")
 # A mobile number: optional +91, 91, 0091 or 0, then 6-9 and nine more digits, with up to two
-# separator characters between digits ("(612) 006-6629"). At most four separators in total.
+# separator characters between digits ("+91 (612) 006-6629"). At most five separators in total.
 _MOBILE = re.compile(
     r"(?<![\w+])(?:(?:\+|00)?91[ \-.]?|0)?\(?[6-9](?:[ \-.)(]{0,2}\d){9}(?![\d])")
 _LANDLINE = re.compile(r"(?<![\w+])(?:\+91[ \-]?|0)\d{2,4}[ \-]\d{6,8}(?![\d])")
-_MASKED_PHONE = re.compile(r"(?<![\w*])(?:\+91[ \-]?)?(?=[\dXx*]{10}(?![\w*]))(?=(?:\d*[Xx*]){4})"
-                           r"(?=(?:[Xx*]*\d){2})[\dXx*]{10}")
-_HOSPITAL_ID = re.compile(r"(?<![A-Za-z0-9])[A-Z][A-Za-z]{0,5}(?:[-/_][A-Z]{2,6})?[-/_]?\d+(?:[-/_]\d+)*"
-                          r"(?![A-Za-z0-9])")
+_MASKED_PHONE = re.compile(r"(?<![\w*•])(?:\+?91[ \-.]?)?[0-9Xx*•](?:[ \-.]?[0-9Xx*•]){9}(?![\w*•])")
+_LOWER_ID_PREFIX = (r"(?:uhid|mrn|ipd|opd|adm|reg|regn|pat|patient|hosp|pid|enc|clm|claim|"
+                    r"pol|policy|pmjay|ayushman|inv|bill|smp|sample)")
+_HOSPITAL_ID = re.compile(
+    rf"(?<![A-Za-z0-9])(?:[A-Z][A-Za-z]{{0,9}}(?:[-/_][A-Za-z]{{2,8}}){{0,2}}|(?i:{_LOWER_ID_PREFIX}))"
+    r"[-/_]?\d+(?:[-/_]\d+)*(?![A-Za-z0-9])")
+_ISO_DATE_TAIL = re.compile(r"[-/_](?:19|20)\d{2}[-/_](?:0[1-9]|1[0-2])[-/_](?:0[1-9]|[12]\d|3[01])$")
 _INSURANCE_PREFIX = re.compile(r"^(?:AB-?)?(?:PMJAY|PMJ|POL|POLICY|INS|CLM|CLAIM|AYU)", re.IGNORECASE)
 _COMPACT_DATETIME = re.compile(r"^(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?:[01]\d|2[0-3])[0-5]\d")
 
@@ -54,6 +58,8 @@ def find_identifiers(text: str) -> list[Span]:
     for m in _ABHA.finditer(text):
         if not _COMPACT_DATETIME.match(_digits(m.group(0))):
             spans.append(_span(m, "ABHA_NUMBER", P_SPECIFIC + 2, "abha"))
+    for m in _ABHA_MASKED.finditer(text):
+        spans.append(_span(m, "ABHA_NUMBER", P_SPECIFIC + 2, "abha_masked"))
     for m in _AADHAAR.finditer(text):
         if not _COMPACT_DATETIME.match(_digits(m.group(0))):
             spans.append(_span(m, "AADHAAR", P_SPECIFIC + 1, "aadhaar"))
@@ -67,16 +73,22 @@ def find_identifiers(text: str) -> list[Span]:
         spans.append(_span(m, "EMAIL", P_SPECIFIC, "email"))
     for m in _MOBILE.finditer(text):
         seps = len(re.findall(r"[ \-.()]", m.group(0)))
-        if seps <= 4:
+        if seps <= 5:
             spans.append(_span(m, "PHONE", P_PHONE, "mobile"))
     for m in _LANDLINE.finditer(text):
         if 10 <= len(_digits(m.group(0))) <= 12:
             spans.append(_span(m, "PHONE", P_PHONE - 1, "landline"))
     for m in _MASKED_PHONE.finditer(text):
-        spans.append(_span(m, "PHONE", P_PHONE, "masked_phone"))
+        body = re.sub(r"^\+?91[ \-.]?", "", m.group(0))
+        core = re.findall(r"[0-9Xx*•]", body)
+        masks = sum(c in "Xx*•" for c in core)
+        digs = len(core) - masks
+        seps = len(re.findall(r"[ \-.]", body))
+        if len(core) == 10 and masks >= 4 and digs >= 2 and seps <= 2:
+            spans.append(_span(m, "PHONE", P_PHONE, "masked_phone"))
     for m in _HOSPITAL_ID.finditer(text):
         value = m.group(0)
-        if len(_digits(value)) < 5:
+        if len(_digits(value)) < 5 or _ISO_DATE_TAIL.search(value):
             continue
         kind = "INSURANCE_ID" if _INSURANCE_PREFIX.match(value) else "MRN"
         spans.append(Span(view=-1, start=m.start(), end=m.end(), type=kind, role="patient",

@@ -24,7 +24,22 @@ _HOMOGLYPHS = str.maketrans({
 })
 _ENTITY = re.compile(r"&(?:#\d{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});")
 _PERCENT_RUN = re.compile(r"(?:%[0-9A-Fa-f]{2})+")
-_NEEDS_WORK = re.compile(r"[&%\u200b-\u200f\u2060-\u2063\ufeff\u00ad\u0370-\u03ff\u0400-\u04ff\uff00-\uffef]")
+_UNICODE_ESC = re.compile(r"\\u([0-9a-fA-F]{4})|\\U([0-9a-fA-F]{8})")
+# Plain ASCII and Devanagari without escapes need no copy; everything else runs through NFKC,
+# homoglyph folding, Latin diacritic stripping and escape decoding (matching SCORING.md).
+_NEEDS_WORK = re.compile(r"[&%]|\\[uU][0-9A-Fa-f]{4}|[\u0080-\u08ff\u0980-\U0010ffff]")
+
+
+def _fold_char(ch: str) -> str:
+    folded = unicodedata.normalize("NFKC", ch).translate(_HOMOGLYPHS)
+    out = []
+    for c in folded:
+        if c in _ZERO_WIDTH or "\u0300" <= c <= "\u036f":
+            continue
+        if "\u00c0" <= c <= "\u024f" or "\u1e00" <= c <= "\u1eff":
+            c = "".join(x for x in unicodedata.normalize("NFD", c) if unicodedata.category(x) != "Mn")
+        out.append(c)
+    return "".join(out)
 
 
 class View:
@@ -43,10 +58,7 @@ class View:
 
         def emit(piece: str, start: int, end: int) -> None:
             for ch in piece:
-                folded = unicodedata.normalize("NFKC", ch).translate(_HOMOGLYPHS)
-                for c in folded:
-                    if c in _ZERO_WIDTH:
-                        continue
+                for c in _fold_char(ch):
                     out.append(c)
                     starts.append(start)
                     ends.append(end)
@@ -72,6 +84,14 @@ class View:
                         decoded = None
                     if decoded:
                         emit(decoded, i, m.end())
+                        i = m.end()
+                        continue
+            elif ch == "\\":
+                m = _UNICODE_ESC.match(original, i)
+                if m:
+                    cp = int(m.group(1) or m.group(2), 16)
+                    if cp <= 0x10FFFF and not (0xD800 <= cp <= 0xDFFF):
+                        emit(chr(cp), i, m.end())
                         i = m.end()
                         continue
             emit(ch, i, i + 1)
