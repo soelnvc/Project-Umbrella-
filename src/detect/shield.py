@@ -37,11 +37,12 @@ _COMPLAINT_DURATION = re.compile(
     r"(?i)\b(?:x|×|for|since)\s*\d|\b\d+\s*(?:days?|wks?|weeks?|months?|yrs?|years?|hrs?|hours?|din)\b"
     r"|\d+\s*(?:दिन|हफ्ते|महीने|साल)|\bse\b|से")
 _CARE_OF = re.compile(r"\bC\s*/\s*O\b\.?[ \t]*(?P<rest>[^\n.;|]*)", re.IGNORECASE)
+_CLAUSE_END = re.compile(r"[,.;|\n]")
 _HISTORY = re.compile(r"\b(?:No\s+)?(?:K\s*/\s*C\s*/\s*O|H\s*/\s*O)\b\.?[^\n.;|]*", re.IGNORECASE)
 _WARD = re.compile(rf"\bWard\s*(?:No\.?\s*)?\d+(?:\s*\({SPECIALTY}[^)]*\))?|\b\d+\s*\({SPECIALTY}[^)]*\)"
                    rf"|\b(?:{SPECIALTY})\s+Ward\b|\bBed\s*(?:No\.?\s*)?\d+\b")
 _ADDRESS_CONTEXT = re.compile(r"(?i)\b(?:h\.?\s*no|house|makan|mohalla|near|opp|tehsil|distt?|vill|gali|"
-                              r"colony|nagar|road|street)\b|मकान|मोहल्ला|गली|तहसील|जिला")
+                              r"colony|nagar|road|street|address|pata|c\s*/\s*o)\b|मकान|मोहल्ला|गली|तहसील|जिला|पता")
 # ASHA as a job title, not the name Asha: followed by a role word, or after "by", "the", "local".
 _ASHA = re.compile(r"(?i:\basha\s+(?:workers?|karyakartas?|sahyoginis?|facilitators?|didi\s*\(asha\)))"
                    r"|(?i:(?<=\bby\s)|(?<=\bthe\s)|(?<=\bour\s)|(?<=\blocal\s)|(?<=\bvillage\s)|(?<=\ban\s))ASHA\b"
@@ -68,8 +69,11 @@ def _keep(start: int, end: int, source: str) -> Span:
 
 
 def complaint_like(rest: str) -> bool:
-    """True when the words after C/O describe a complaint, not a person (decision A in plan.md)."""
-    rest = rest.strip(" ,:-")
+    """True when the words after C/O describe a complaint, not a person (decision A in plan.md).
+
+    Only the first clause counts: in "C/O Ramesh Patel, Ward 1" the ward belongs to the address.
+    """
+    rest = _CLAUSE_END.split(rest.strip(" :-"), maxsplit=1)[0].strip()
     if not rest:
         return False
     if _COMPLAINT_DURATION.search(rest):

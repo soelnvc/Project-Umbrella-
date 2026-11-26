@@ -116,3 +116,10 @@ HINGLISH_FUNCTION = _load("hinglish_function_words.txt")
 DISTRICT_WORDS, DISTRICT_PHRASES = _split(_load("districts_up.txt"))
 MEDICAL_WORDS = DRUGS | SYMPTOMS | CLINICAL | HINDI_MEDICAL | DISTRICT_WORDS
 LOWER_CASE_ONLY = SYMPTOMS_HINGLISH | HINGLISH_FUNCTION
+COMMON_WORDS = _load("common_words.txt") | _load("hindi_common.txt")
+
+# Name parts that identify no one on their own; never spread from one mention to others.
+GENERIC_NAME_PARTS = frozenset({
+    "devi", "kumar", "kumari", "md", "mohd", "mohammad", "mohammed", "muhammad", "mohamad", "bano",
+    "begum", "singh", "kaur", "lal", "ji", "देवी", "कुमार", "कुमारी", "मोहम्मद", "बानो", "बेगम", "सिंह",
+    "कौर", "लाल"})

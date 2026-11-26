@@ -15,7 +15,15 @@ NAME = "name"
 RELATIVE = "relative"
 RELATIVE_CUE = "relative_cue"     # values like "S/o Ram Prasad": keep the cue, remove the name
 DOCTOR = "doctor"
+VILLAGE = "VILLAGE"
+PIN = "PIN"
 UNKNOWN = "unknown"
+
+_VILLAGE_STEMS = ("village", "vill", "gaon", "basti", "mauza", "ग्राम", "गाँव", "गांव")
+_VILLAGE_TOKENS = frozenset({"gram"})
+_TOWN_STEMS = ("city", "town", "locality")
+_PIN_STEMS = ("pin", "zip", "postal", "postcode", "pincode", "डाक", "पिन")
+_SIX_DIGITS = re.compile(r"[1-9]\d{2}\s?\d{3}")
 
 _RELATION_CUE = re.compile(r"^\s*(?:[SDWFM]\s*/\s*[Oo]|पुत्र|पुत्री|पत्नी|पति)\b\.?", re.IGNORECASE)
 _CARE_OF = re.compile(r"^\s*C\s*/\s*O\b\.?", re.IGNORECASE)
@@ -45,6 +53,11 @@ def _lexicon_hit(value: str) -> bool:
     return any(t.strip(".").casefold() in vocab.ALL_NAMES for t in value.split())
 
 
+def _district(value: str) -> bool:
+    low = " ".join(value.casefold().split())
+    return low in vocab.DISTRICT_WORDS or low in vocab.DISTRICT_PHRASES
+
+
 def classify(values: list[str], hint: str) -> str:
     """Field type for a column or a JSON field path, from its values and its name."""
     filled = [v.strip() for v in values if isinstance(v, str) and v.strip() and not v.strip().startswith("[")]
@@ -72,6 +85,14 @@ def classify(values: list[str], hint: str) -> str:
         return RELATIVE_CUE
 
     shaped = sum(patterns.name_shaped(v) for v in filled) / n
+    if vocab.has(hint, _PIN_STEMS) and sum(bool(_SIX_DIGITS.fullmatch(v)) for v in filled) >= 0.6 * n:
+        return PIN
+    villages = vocab.has(hint, _VILLAGE_STEMS, _VILLAGE_TOKENS)
+    towns = vocab.has(hint, _TOWN_STEMS) and not vocab.has(hint, ("district", "jila", "zila", "tehsil"))
+    if (villages or towns) and shaped >= 0.7:
+        districts = sum(_district(v) for v in filled) / n
+        if villages or districts < 0.5:
+            return VILLAGE
     if shaped < 0.7 or vocab.has(hint, vocab.NONPERSON_STEMS, vocab.NONPERSON_TOKENS):
         return UNKNOWN
     if vocab.has(hint, vocab.RELATIVE_STEMS, vocab.RELATIVE_TOKENS):

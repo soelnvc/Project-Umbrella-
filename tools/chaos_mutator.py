@@ -182,7 +182,7 @@ def build_name_maps(truth: dict, rng: random.Random):
 
     # New names must be unseen: not in the practice data and not in the pipeline's name lists,
     # so the scrambled test measures detection without help from those lists.
-    excluded = {o[0] for o in occurrences} | ALL_NAMES
+    excluded = {o[0] for o in occurrences} | ALL_NAMES | protected
 
     def fresh(pairs):
         return [p for p in pairs if p[0].casefold() not in excluded and p[1] not in excluded]

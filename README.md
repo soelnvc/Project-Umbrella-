@@ -52,6 +52,22 @@ Detection only marks spans of text; a single writer (`src/rewrite/spans.py`) res
 - **Replacements:** typed placeholders (`[NAME]`, `[RELATIVE]`, `[PHONE]`, `[AADHAAR]`, `[ABHA]`, `[PAN]`, `[EMAIL]`, `[INSURANCE_ID]`). Hospital record and visit numbers become keyed tokens (`ID-XXXXXXXX`, HMAC with a subkey of `RAKSHA_SECRET`), so the same number maps to the same token in every file without being reversible. No partial digits are kept. An identifier stored as a JSON number becomes `0`, keeping the type.
 - **Word lists** (`config/lexicons/`): common Indian given names and surnames in Latin and Devanagari, used only as supporting evidence for unlabelled columns.
 
+## Names from context and addresses
+
+`src/detect/names.py` finds names that have no label:
+
+- **Relatives** after relation markers: `S/o`, `D/o`, `W/o`, `F/o`, `son of`, `wife of`, `पुत्र`, `पुत्री`, `पत्नी`, `पति`, and `C/O` when no complaint follows (only the first clause counts, so in `C/O Ramesh Patel, Ward 1` the ward is part of the address).
+- **The patient before a relation marker**, the fragmented-identity form: `Asha, W/o Kamal, discharged`.
+- **Honorifics** after a name (`ji`, `sahab`, `bhai`, `didi`, `babu`, `mama`, `जी`, `साहब` …) or before it (`Mr`, `Smt`, `Shri`, `Begum`, `श्री`, `श्रीमती` …).
+- **Hinglish and Hindi sentence patterns**: a capitalised name before `ka`, `ki`, `ke`, `ne`, `ko`, `se`, or Devanagari words before `को`, `का`, `की`, `के`, `ने`, `से`, skipping common words such as `मरीज़` (patient).
+- **Timelines, attendants and chats**: `14:00 - Brajesh Yadav`, `Zorawar Qadri (attendant, …)`, `Sunita's attendant`, `called by …`, `witnessed by …`, and WhatsApp sender headers.
+
+A captured word must look like a name: capitalised Latin or Devanagari, and not a common word, medical word, honorific or grammar word (`config/lexicons/common_words.txt`, `hindi_common.txt`). A capture made only of generic name parts (`Mohd.`, `Devi`, `Kumar`) is rejected.
+
+`src/detect/address.py` removes house numbers (`H.No. 364`, `Makan No. 12`, `मकान नं. 398`), localities (`Mohalla Raja Bazar`, a municipal `Ward 20`), landmarks (`near Pani Tanki`, `जामा मस्जिद के पीछे`) and villages, whether named after a keyword (`Gram`, `Vill.`, `ग्राम`) or by position just before the tehsil. Tehsil and district names are kept. PIN codes keep their first three digits (`229***`). Village and PIN columns are recognised by the profiler, and FHIR `address.city` and `postalCode` are handled the same way; FHIR extensions whose URL describes a person (`…/mothers-name`) are treated as names.
+
+**Name spreading (same file only).** A name found confidently (a name field, a label, a relation marker, an honorific, a timeline or chat sender) is searched for everywhere else in the same file, in any letter case, so `Mohd. Shahid` in a note is removed once `मरीज़ का नाम: …` or a registration column named him. Names never spread across files. Generic name parts, common words, medical words and districts are never spread, and doctor names stay protected.
+
 ## The clinical shield
 
 `src/detect/shield.py` marks text that name and address detection must never remove. It covers the ten scored trap groups and the rest of the clinical record:

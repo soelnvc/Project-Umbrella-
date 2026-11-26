@@ -21,12 +21,23 @@ from pathlib import Path
 
 _B64 = re.compile(r"[A-Za-z0-9+/]{24,}={0,2}")
 _DIGIT_KINDS = {"PHONE", "AADHAAR", "ABHA_NUMBER"}
+_NAME_KINDS = {"PATIENT_NAME", "RELATIVE_NAME", "CANARY"}
+_LETTERS = "a-z\u0900-\u097f"
 
 
-def digits_pattern(digits: str) -> re.Pattern:
-    """The digits in order, allowing separators between them, not glued to other digits."""
+def _word_pattern(value: str) -> re.Pattern:
+    """A name as whole words: "hema" must not match inside "schema"."""
+    return re.compile(rf"(?<![{_LETTERS}]){re.escape(value)}(?![{_LETTERS}])")
+
+
+def digits_pattern(digits: str, phone: bool = False) -> re.Pattern:
+    """The digits in order, allowing separators between them, not glued to other digits.
+
+    A phone number may carry a leading 0 or +91/91 in front of its ten digits.
+    """
     body = r"[ \-./()]{0,2}".join(digits)
-    return re.compile(rf"(?<!\d){body}(?!\d)")
+    prefix = r"(?:(?:\+|00)?91[ \-.]?|0)?" if phone else ""
+    return re.compile(rf"(?<!\d){prefix}{body}(?!\d)")
 
 
 def norm(s: str) -> str:
@@ -77,9 +88,11 @@ def main() -> int:
             needle = re.sub(r"\D", "", v["value"])
             if kind == "PHONE":
                 needle = needle[-10:]
-            hit = bool(needle) and digits_pattern(needle).search(text) is not None
+            hit = bool(needle) and digits_pattern(needle, phone=kind == "PHONE").search(text) is not None
         elif kind == "MRN" and v.get("digits") and len(v["digits"]) >= 5:
             hit = digits_pattern(v["digits"]).search(text) is not None
+        elif kind in _NAME_KINDS:
+            hit = _word_pattern(norm(v["value"])).search(hay) is not None
         else:
             hit = norm(v["value"]) in hay
         if v.get("canary"):

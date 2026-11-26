@@ -16,7 +16,14 @@ PLACEHOLDERS = {
     "EMAIL": "[EMAIL]",
     "INSURANCE_ID": "[INSURANCE_ID]",
     "MRN": "[ID]",
+    "HOUSE": "[ADDRESS]",
+    "LOCALITY": "[ADDRESS]",
+    "LANDMARK": "[ADDRESS]",
+    "ADDRESS": "[ADDRESS]",
+    "VILLAGE": "[VILLAGE]",
+    "PIN": "[PIN]",
 }
+_DIGITS = str.maketrans("०१२३४५६७८९", "0123456789")
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 
@@ -25,6 +32,7 @@ BLOCKABLE = frozenset({"PATIENT_NAME", "RELATIVE_NAME", "HOUSE", "LOCALITY", "LA
                        "ADDRESS"})
 _WHOLE_FIELD_SOURCES = frozenset({"field", "fhir"})
 _WORD_LIST_SOURCES = frozenset({"lexicon", "asha", "code"})
+_ADDRESS_TYPES = frozenset({"HOUSE", "LOCALITY", "LANDMARK", "VILLAGE", "ADDRESS"})
 
 
 def _blocks(protection: Span, span: Span) -> bool:
@@ -32,8 +40,8 @@ def _blocks(protection: Span, span: Span) -> bool:
         return False
     if span.source in _WHOLE_FIELD_SOURCES:
         return protection.source == "doctor"
-    if span.source == "label" and protection.source in _WORD_LIST_SOURCES:
-        # After an explicit label, a word-list match may only trim trailing words.
+    if (span.source == "label" or span.type in _ADDRESS_TYPES) and protection.source in _WORD_LIST_SOURCES:
+        # After an explicit label or address keyword, a word-list match may only trim trailing words.
         return protection.start > span.start
     return True
 
@@ -90,9 +98,18 @@ def keyed_token(keys: Keys, kind: str, value: str) -> str:
     return "ID-" + "".join(_CROCKFORD[(n >> (5 * i)) & 31] for i in range(8))
 
 
+def generalize(kind: str, original: str) -> str:
+    if kind == "PIN":
+        digits = re.sub(r"\D", "", original.translate(_DIGITS))
+        return digits[:3] + "***" if len(digits) == 6 else PLACEHOLDERS["PIN"]
+    return PLACEHOLDERS.get(kind, "[REDACTED]")
+
+
 def replacement(span: Span, original: str, keys: Keys) -> str:
     if span.action == "token":
         return keyed_token(keys, span.type, original)
+    if span.action == "generalize":
+        return generalize(span.type, original)
     return PLACEHOLDERS.get(span.type, "[REDACTED]")
 
 

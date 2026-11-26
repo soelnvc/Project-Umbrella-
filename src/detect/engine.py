@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 
 from src.core.models import Span
-from src.detect import patterns, profiler, shield, vocab
+from src.detect import address, names, patterns, profiler, propagate, shield, vocab
 from src.ingest.parsers import ParsedFile
 
 P_FIELD = 60          # a whole field classified by the profiler or a FHIR rule
@@ -54,6 +54,12 @@ def field_spans(value: str, ftype: str, source: str = "field") -> list[Span]:
         if ftype != "EMAIL" and not any(ch.isdigit() for ch in v):
             return []
         span = _whole(value, ftype, "patient", source)
+    elif ftype == profiler.VILLAGE:
+        span = _whole(value, "VILLAGE", "patient", source)
+    elif ftype == profiler.PIN:
+        span = _whole(value, "PIN", "patient", source)
+        if span:
+            span.action = "generalize"
     else:
         return []
     return [span] if span else []
@@ -66,7 +72,12 @@ def _text_spans(value: str, ftype: str) -> list[Span]:
             spans.append(Span(view=-1, start=0, end=len(value), type="PROTECTED", role="protected",
                               action="keep", source="doctor", priority=100))
         return spans
-    return patterns.find_all(value) + shield.find_protected(value)
+    return free_text_spans(value)
+
+
+def free_text_spans(value: str) -> list[Span]:
+    return (patterns.find_all(value) + names.find_contextual_names(value) + address.find_address(value)
+            + shield.find_protected(value))
 
 
 # --------------------------------------------------------------------------- tables
@@ -81,25 +92,29 @@ def _shifted_type(cell: str, types: list[str], col: int) -> str:
     return profiler.UNKNOWN
 
 
-def _detect_table(parsed: ParsedFile) -> None:
+def _detect_table(parsed: ParsedFile) -> dict:
     width = len(parsed.header)
     types = []
     for c in range(width):
         values = [row[c] for i, row in enumerate(parsed.rows) if c < len(row) and i not in parsed.shifted_rows]
         types.append(profiler.classify(values, parsed.header[c]))
     parsed.field_types = {f"col:{c}": t for c, t in enumerate(types)}
+    views = {}
     for c, head in enumerate(parsed.header):
+        views[("header", c)] = head
         spans = patterns.find_identifiers(head)
         if spans:
             parsed.spans[("header", c)] = spans
     for i, row in enumerate(parsed.rows):
         for c, cell in enumerate(row):
+            views[("cell", i, c)] = cell
             ftype = types[c] if c < width else profiler.UNKNOWN
             if i in parsed.shifted_rows:
                 ftype = _shifted_type(cell, types, c)
             spans = field_spans(cell, ftype) + _text_spans(cell, ftype)
             if spans:
                 parsed.spans[("cell", i, c)] = spans
+    return views
 
 
 # --------------------------------------------------------------------------- json
@@ -156,7 +171,7 @@ def _mark_leaf(parsed: ParsedFile, path: tuple, value, spans: list[Span]) -> Non
     parsed.spans[("json", path)] = spans
 
 
-def _detect_json(parsed: ParsedFile) -> None:
+def _detect_json(parsed: ParsedFile) -> dict:
     leaves = list(iter_leaves(parsed.data))
     groups: dict[tuple, list[str]] = defaultdict(list)
     for path, value in leaves:
@@ -165,12 +180,14 @@ def _detect_json(parsed: ParsedFile) -> None:
             groups[_general(path)].append(text)
     types = {g: profiler.classify(vals, _hint(g)) for g, vals in groups.items()}
     parsed.field_types = {"/".join(map(str, g)): t for g, t in types.items() if t != profiler.UNKNOWN}
+    views = {}
     for path, value in leaves:
         text = _leaf_text(value)
         if text is None:
             continue
         ftype = types[_general(path)]
         if isinstance(value, str):
+            views[("json", path)] = value
             spans = field_spans(text, ftype) + _text_spans(text, ftype)
         else:
             spans = field_spans(text, ftype) if ftype in ID_TYPES else []
@@ -178,6 +195,7 @@ def _detect_json(parsed: ParsedFile) -> None:
             if not spans and kind in ("AADHAAR", "ABHA_NUMBER", "PHONE"):
                 spans = field_spans(text, kind)
         _mark_leaf(parsed, path, value, spans)
+    return views
 
 
 def _resource_type(data, path: tuple) -> tuple[str | None, int]:
@@ -193,7 +211,25 @@ def _resource_type(data, path: tuple) -> tuple[str | None, int]:
     return rtype, at
 
 
-def _detect_fhir(parsed: ParsedFile) -> None:
+_FHIR_ADDRESS_KEEP = frozenset({"district", "state", "country", "use", "type"})
+
+
+def _extension_url(data, path: tuple) -> str | None:
+    """The url of the extension a value* leaf belongs to ("…/mothers-name"), if any."""
+    if not path or not isinstance(path[-1], str) or not path[-1].startswith("value"):
+        return None
+    node = data
+    for key in path[:-1]:
+        try:
+            node = node[key]
+        except (KeyError, IndexError, TypeError):
+            return None
+    url = node.get("url") if isinstance(node, dict) else None
+    return url if isinstance(url, str) else None
+
+
+def _detect_fhir(parsed: ParsedFile) -> dict:
+    views = {}
     for path, value in iter_leaves(parsed.data):
         text = _leaf_text(value)
         if text is None or not path:
@@ -201,15 +237,28 @@ def _detect_fhir(parsed: ParsedFile) -> None:
         last = path[-1]
         if last in _FHIR_SKIP_KEYS and not isinstance(value, int):
             continue
+        if isinstance(value, str):
+            views[("json", path)] = value
         rtype, at = _resource_type(parsed.data, path)
         inner = [p for p in path[at:] if isinstance(p, str)]
         spans: list[Span] = []
         parent = next((p for p in reversed(path[:-1]) if isinstance(p, str)), "")
-        if last == "display" and parent in _SUBJECT_KEYS:
+        extension_url = _extension_url(parsed.data, path)
+        if extension_url is not None and isinstance(value, str) and vocab.has(
+                extension_url, vocab.NAME_STEMS + vocab.RELATIVE_STEMS, vocab.RELATIVE_TOKENS):
+            relative = vocab.has(extension_url, vocab.RELATIVE_STEMS, vocab.RELATIVE_TOKENS)
+            spans = field_spans(text, profiler.RELATIVE if relative else profiler.NAME, "fhir")
+        elif last == "display" and parent in _SUBJECT_KEYS:
             spans = field_spans(text, profiler.NAME, "fhir")
         elif rtype in _FHIR_PERSON and "name" in inner:
             relative = rtype == "RelatedPerson" or "contact" in inner
             spans = field_spans(text, profiler.RELATIVE if relative else profiler.NAME, "fhir")
+        elif rtype in _FHIR_PERSON and "address" in inner and last in ("city", "village"):
+            spans = [] if profiler._district(text) else field_spans(text, profiler.VILLAGE, "fhir")
+        elif rtype in _FHIR_PERSON and "address" in inner and last == "postalCode":
+            spans = field_spans(text, profiler.PIN, "fhir")
+        elif rtype in _FHIR_PERSON and "address" in inner and last in _FHIR_ADDRESS_KEEP:
+            spans = []
         elif rtype in _FHIR_PERSON and "telecom" in inner and last == "value":
             spans = field_spans(text, patterns.full_match_type(text) or "PHONE", "fhir")
         elif "identifier" in inner and last == "value" and rtype not in _FHIR_STAFF:
@@ -217,8 +266,9 @@ def _detect_fhir(parsed: ParsedFile) -> None:
         elif rtype in _FHIR_STAFF and "name" in inner:
             spans = patterns.find_identifiers(text)
         elif isinstance(value, str):
-            spans = patterns.find_all(text) + shield.find_protected(text)
+            spans = free_text_spans(text)
         _mark_leaf(parsed, path, value, spans)
+    return views
 
 
 # --------------------------------------------------------------------------- entry point
@@ -226,15 +276,33 @@ def detect(parsed: ParsedFile) -> None:
     parsed.spans = {}
     parsed.field_types = {}
     if parsed.fmt in ("csv", "tsv"):
-        _detect_table(parsed)
+        views = _detect_table(parsed)
     elif parsed.fmt == "fhir":
-        _detect_fhir(parsed)
+        views = _detect_fhir(parsed)
     elif parsed.fmt == "json":
-        _detect_json(parsed)
+        views = _detect_json(parsed)
     else:
-        spans = patterns.find_all(parsed.text) + shield.find_protected(parsed.text)
+        views = {("text",): parsed.text}
+        spans = free_text_spans(parsed.text)
         if spans:
             parsed.spans[("text",)] = spans
+    _spread_names(parsed, views)
+
+
+def _spread_names(parsed: ParsedFile, views: dict) -> None:
+    """Same-file name spreading (plan decision: names never cross files)."""
+    from src.rewrite.spans import resolve
+    found = propagate.seeds(views, parsed.spans, resolve)
+    rx = propagate.matcher(found)
+    if rx is None:
+        return
+    for address_key, text in views.items():
+        extra = propagate.find(text, rx, found)
+        if not extra:
+            continue
+        if address_key not in parsed.spans:
+            parsed.spans[address_key] = shield.find_protected(text)
+        parsed.spans[address_key].extend(extra)
 
 
 def entity_counts(parsed: ParsedFile, resolve) -> Counter:
