@@ -44,6 +44,7 @@ class Profile:
     texts: set[str] = field(default_factory=set)
     procedures: set[str] = field(default_factory=set)
     stays: set[int] = field(default_factory=set)
+    admissions: list = field(default_factory=list)
     band_step: int = 0
     geo_level: int = 0
     high_risk: bool = False
@@ -154,6 +155,7 @@ def plan(files, record_clues: dict, keys: Keys, policy: dict) -> dict:
             for codes, texts in by_parent.values():
                 if len(codes) == 1:
                     code_texts[next(iter(codes))] |= texts
+            prof.admissions += admissions
             if admissions and discharges:
                 stay = (min(discharges) - min(admissions)).days
                 if 0 <= stay <= 365:
@@ -200,7 +202,23 @@ def plan(files, record_clues: dict, keys: Keys, policy: dict) -> dict:
             generalized += changed
     return {"profiles": len(profiles), "records_generalized": generalized,
             "high_risk": sum(p.high_risk for p in profiles.values()), "escalated": escalated,
-            "below_k": below_k}
+            "below_k": below_k, "unique_released": _unique_released(profiles, top, chapters_on)}
+
+
+def _unique_released(profiles: dict, top: int, chapters_on: bool) -> int:
+    """Patients alone on (age band, district, admission week, diagnoses) as released."""
+    keys = Counter()
+    per = {}
+    for p in profiles.values():
+        week = None
+        if p.admissions:
+            week = (min(p.admissions) + dt.timedelta(days=p.shift)).isocalendar()[:2]
+        codes = frozenset((icd.chapter(c) or (c,))[0] if chapters_on and c in p.rare_codes else c
+                          for c in p.codes)
+        place = p.district if GEO_LEVELS[p.geo_level] != "withheld" else None
+        per[p.key] = (_band(p.ages, p.band_step, top), place, week, codes)
+        keys[per[p.key]] += 1
+    return sum(keys[v] == 1 for v in per.values())
 
 
 def _place_of(p: Profile) -> str | None:

@@ -4,7 +4,7 @@ An offline, CPU-only, LLM-free privacy firewall for multilingual Indian hospital
 
 It reads a folder of synthetic hospital exports (CSV, TSV, JSON, FHIR R4 Bundles and text notes) and writes a cleaned copy in which personal information is removed, medical values are kept exactly, each patient carries one fake ID across files, and every file's fate is recorded in an honest report.
 
-> Status: early development. The pipeline runs end to end and meets the output contract. Detection, patient linking and the privacy layer are being built step by step.
+On the practice data: 0.0% of personal data still visible (in all three languages and every hiding place), 96.6% of medical values kept, patient linking F0.5 of 1.00 with no wrong merges, and 15% of patients re-identifiable by our copy of the published attacker (98% on the raw data). The two-page project brief is [`docs/brief.pdf`](docs/brief.pdf) (source: `docs/brief.html`, rebuilt with `tools/build_brief.sh`).
 
 ## Setup
 
@@ -26,7 +26,7 @@ The run needs no internet. `RAKSHA_SECRET` keys the fake patient IDs and date sh
 
 | Path | Contents |
 |---|---|
-| `sanitized/` | cleaned files, same folders, names and formats as the input |
+| `sanitized/` | cleaned files in the same folders and formats as the input; file names become `doc_<HMAC>` so no name or record number survives in them |
 | `report.json` | every input file by SHA-256, its status, and true totals |
 | `records.jsonl` | one line per patient record with its fake patient ID |
 
@@ -214,4 +214,10 @@ None. The system uses rules, word lists and classical matching only.
 
 ## Known limitations
 
-Detection, linking and the privacy layer are not built yet. This section will list measured limitations once they are.
+- **Rules, not models.** A name with no context, in no word list and in a format unlike anything seen before could be missed. The scrambled-data test (0 of 809 inserted values visible) and the release gate reduce this risk; they do not remove it.
+- **Targeted attack.** Our attacker still succeeds against 57% of the people with known visit facts, because common diagnoses are kept on purpose. Our attacker is also weaker than the official one on record linkage and the targeted attack, so those two numbers may understate the real risk.
+- **k=5 is not reachable on small data.** All 57 practice patients stay in groups below 5 even at district level and 20-year bands; rare patients are protected by the rare-value rules instead, and 50 of 57 are unique inside the release on age band, district, admission week and diagnoses.
+- **Unsupported formats.** PDF, image and XML files are quarantined, not cleaned.
+- **Very large single files.** A 25 MB JSON export runs in 104 seconds but needs 1.6 GB of memory, because linking and the privacy plan see every record at once.
+- **Ambiguous dates** such as 03/04/2026 are read day-first or month-first from the file's own dates, or from other files of the same source; a file with no deciding dates and no known source defaults to day-first.
+- **Withheld dates of birth** cost research on exact age at a visit; the age band remains.
