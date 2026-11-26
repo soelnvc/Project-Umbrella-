@@ -40,8 +40,11 @@ def _blocks(protection: Span, span: Span) -> bool:
         return False
     if span.source in _WHOLE_FIELD_SOURCES:
         return protection.source == "doctor"
-    if (span.source == "label" or span.type in _ADDRESS_TYPES) and protection.source in _WORD_LIST_SOURCES:
-        # After an explicit label or address keyword, a word-list match may only trim trailing words.
+    if span.type in _ADDRESS_TYPES and protection.source in _WORD_LIST_SOURCES:
+        # An address part anchored by a keyword ("opp. Primary School") is not cut by word lists.
+        return False
+    if span.source == "label" and protection.source in _WORD_LIST_SOURCES:
+        # After an explicit label, a word-list match may only trim trailing words.
         return protection.start > span.start
     return True
 

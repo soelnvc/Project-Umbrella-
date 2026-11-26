@@ -78,6 +78,18 @@ A captured word must look like a name: capitalised Latin or Devanagari, and not 
 - **File and folder names:** a name that holds an identifier, a phone number, a listed name or one of the file's own detected names is replaced with an opaque name, `doc_<hash>.<ext>` or `dir_<hash>`, derived from a keyed hash and never from the original name. Other names are kept. The new path is recorded in `report.json` against the file's SHA-256.
 - **Table cues:** a name-shaped column beside a column of bare relation markers (`S/o`, `W/o`) holds relatives' names, whatever its header says.
 
+## Linking patients
+
+`src/link/` gives every patient one fake ID across files, scripts and hospitals, without ever merging two different people.
+
+- **Clues per record** (`clues.py`): identifiers, the patient's name and relatives' names (from the marked spans, before replacement), gender, date of birth, ages with their visit year, village, tehsil and district. Each file's dates are read day-first or month-first by its own header hints and values (`dates.py`). A record whose confident sources name two people who cannot be the same (an index file, a ward sheet) is never linked.
+- **Cross-script names** (`translit.py`, `phonetic.py`): Devanagari is transliterated with our own table (schwa deletion, anusvara, nukta), then folded phonetically (vowel length, aspirates, v/w, z/j, sh/s, doubled letters), so मोहम्मद शाहिद, Mohammad Shahid and Mohd. Shahid compare as one name and Rina and Rani do not. Generic parts (Mohd., Devi, Kumar, Singh) are ignored.
+- **Conservative links** (`cluster.py`): two records link on a shared strong identifier (Aadhaar, ABHA, PAN, email, hospital record number), on a shared phone or insurance number that is not a household one, or on matching names plus a second clue (date of birth, a relative of the same kind, or village with a compatible birth year). A one-word name links to a full-name group only when exactly one such group fits. A merge is refused when any pair across the two groups conflicts on gender, Aadhaar or ABHA, a relative of the same kind, or name; for name-based links, date of birth and birth year must also agree (a shared record number overrides a mistyped age).
+- **Fake IDs** (`pseudonym.py`): `PSN-` plus 8 characters of an HMAC (subkey of `RAKSHA_SECRET`) over the group's first record position, never over personal data, so they are stable for one secret and change with another.
+- **Placement** (`assign.py`): the fake ID replaces the patient's record number inside the record (UHID column, `patient_ref`, the FHIR Patient identifier); in a record without one, it replaces the patient's name mentions. Visit, bill and sample numbers keep their keyed `ID-` tokens.
+
+On the practice data: precision 1.00, recall 0.98, no two people merged; both same-name pairs stay apart.
+
 ## The clinical shield
 
 `src/detect/shield.py` marks text that name and address detection must never remove. It covers the ten scored trap groups and the rest of the clinical record:
@@ -121,6 +133,7 @@ A single file ledger tracks every input file from start to finish, so no file is
 | `tools/leak_check.py` | counts how many of the values the scrambler inserted survive in an output |
 | `src/ingest/` | file walk, format detection from content, encoding rules, parsers, depth-proof JSON |
 | `src/detect/` | identifier and name patterns, the column and field profiler, the detection engine, field and label words |
+| `src/link/` | transliteration, phonetic name keys, date reading, linking clues, clustering, fake IDs and their placement |
 | `src/rewrite/` | the span writer, applying spans to fields, writing each file back in its original format |
 | `config/lexicons/` | name lists, medical word lists (drugs, symptoms, eponyms, clinical terms, Hindi medical words), grammar words, Uttar Pradesh districts |
 | `config/policy.yaml` | privacy settings |

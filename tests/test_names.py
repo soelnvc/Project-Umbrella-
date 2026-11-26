@@ -77,7 +77,7 @@ def test_clinical_and_common_text_is_untouched(text):
      "Address: [ADDRESS], [ADDRESS], [ADDRESS], [VILLAGE], Tehsil Lalganj, Distt. Rae Bareli - 229***"),
     ("पता: मकान नं. 398, ग्राम भीमनगर, तहसील कादीपुर, जिला सुल्तानपुर - 228076",
      "पता: [ADDRESS], ग्राम [VILLAGE], तहसील कादीपुर, जिला सुल्तानपुर - 228***"),
-    ("मकान नं. 32, जामा मस्जिद के पीछे, तहसील नवाबगंज", "[ADDRESS], [ADDRESS] के पीछे, तहसील नवाबगंज"),
+    ("मकान नं. 32, जामा मस्जिद के पीछे, तहसील नवाबगंज", "[ADDRESS], [ADDRESS], तहसील नवाबगंज"),
     ("PIN Code: 226001", "PIN Code: 226***"),
 ])
 def test_addresses(text, expected):

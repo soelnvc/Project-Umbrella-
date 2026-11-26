@@ -11,8 +11,8 @@ from src.core.models import Span
 from src.detect.patterns import DEVA_LETTERS
 
 DEVA = DEVA_LETTERS
-_NAME_WORDS = r"[A-Z][\w.'’-]*(?:\s+[A-Z][\w.'’-]*){0,3}"
-_DEVA_WORDS = rf"[{DEVA}]+(?:\s+[{DEVA}]+){{0,2}}"
+_NAME_WORDS = r"[A-Z][\w.'’-]*(?:[ \t]+[A-Z][\w.'’-]*){0,3}"
+_DEVA_WORDS = rf"[{DEVA}]+(?:[ \t]+[{DEVA}]+){{0,2}}"
 _ADMIN = r"(?:Tehsil|Teh|Distt|District|Dist|Block|Post|PO|PS|Thana|Pin|PIN)\b"
 
 _HOUSE = re.compile(

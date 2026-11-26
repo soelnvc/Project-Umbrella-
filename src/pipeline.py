@@ -15,6 +15,7 @@ from src.core.secret import MissingSecret, load_keys
 from src.detect import channels, engine
 from src.ingest.parsers import ParsedFile, parse
 from src.ingest.walker import walk
+from src.link.assign import link_files
 from src.rewrite.apply import apply
 from src.rewrite.serialize import serialize
 from src.rewrite.spans import resolve
@@ -91,6 +92,19 @@ def run(inp: Path, out: Path) -> int:
         used_paths.add(entry.out_rel)
         parsed_files[entry.file_id] = parsed
         ledger.advance(entry, "parsed")
+
+    # Pass 2: link records across files and place each patient's fake ID inside the records.
+    if not watchdog.expired():
+        try:
+            files = [(e.file_id, e.sha256, parsed_files[e.file_id]) for e in ledger.pending()]
+            link_summary = link_files(files, keys)
+            safety.log("linked", **link_summary)
+        except Exception:  # noqa: BLE001
+            # Linking is an improvement, not a requirement: without it every record stays unlinked.
+            safety.log("link_failed", stream=sys.stderr)
+            for parsed in parsed_files.values():
+                for record in parsed.records:
+                    record.pseudonym = None
 
     # Pass 4: build each output in memory. The release gate (Step 12) will check it here.
     for entry in ledger.pending():

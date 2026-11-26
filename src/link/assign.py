@@ -1,0 +1,57 @@
+"""Link all records across files, give each patient a fake ID, and place it inside each record."""
+from __future__ import annotations
+
+from src.core.secret import Keys
+from src.link import clues, cluster, pseudonym
+from src.rewrite.spans import resolve
+
+
+def _place(parsed, loc: str, psn: str) -> bool:
+    """Put the pseudonym in the patient's record number; failing that, in the patient's name."""
+    placed = False
+    fields = clues.record_fields(parsed, loc)
+    for address, hint, text in fields:
+        for span in resolve(parsed.spans.get(address, []), text):
+            if span.type != "MRN" or span.source in ("propagation", "path"):
+                continue
+            label = text[max(0, span.start - 25):span.start]
+            if clues._is_patient_id_hint(hint) or clues._is_patient_id_hint(label):
+                span.action, span.replacement = "replace", psn
+                placed = True
+    if placed:
+        return True
+    for address, _, text in fields:
+        for span in resolve(parsed.spans.get(address, []), text):
+            if span.type == "PATIENT_NAME":
+                span.action, span.replacement = "replace", psn
+                placed = True
+    return placed
+
+
+def link_files(files: list[tuple[int, str, object]], keys: Keys) -> dict[str, int]:
+    """files: (file_id, sha256, parsed). Sets record.pseudonym; returns summary counts."""
+    records = []
+    owners = []
+    for file_id, sha256, parsed in files:
+        conv = clues.file_convention(parsed)
+        for record in parsed.records:
+            rc = clues.extract(parsed, record.loc, sha256, conv)
+            rc.file_id = file_id
+            records.append(rc)
+            owners.append((parsed, record))
+    groups = cluster.link(records)
+    anchors: dict[int, tuple[str, str]] = {}
+    for rc, group in zip(records, groups):
+        if group is not None:
+            anchors[group] = min(anchors.get(group, rc.key), rc.key)
+    names = pseudonym.assign_pseudonyms(keys, anchors)
+    placed = linked = 0
+    for (parsed, record), group in zip(owners, groups):
+        if group is None:
+            continue
+        record.cluster_id = group
+        record.pseudonym = names[group]
+        linked += 1
+        placed += _place(parsed, record.loc, record.pseudonym)
+    return {"records": len(records), "with_patient": linked, "placed": placed,
+            "patients": len(names)}
