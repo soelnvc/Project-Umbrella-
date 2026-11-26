@@ -180,7 +180,9 @@ def _hint(path: tuple) -> str:
     parent = path[-2] if len(path) >= 2 and isinstance(path[-2], str) and path[-2] != "*" else None
     if parent is None:
         return last
-    if vocab.has(parent, vocab.RELATIVE_STEMS, vocab.RELATIVE_TOKENS) or not vocab.any_hint(last):
+    generic_last = last.lower() in ("name", "title", "label", "display", "text", "full_name")
+    if (vocab.has(parent, vocab.RELATIVE_STEMS, vocab.RELATIVE_TOKENS) or not vocab.any_hint(last)
+            or (generic_last and vocab.has(parent, vocab.NONPERSON_STEMS, vocab.NONPERSON_TOKENS))):
         return f"{parent} {last}"
     return last
 
@@ -379,6 +381,8 @@ def _spread_names(parsed: ParsedFile, views: dict):
     if rx is None and core_rx is None:
         return found, rx
     for address_key, text in views.items():
+        if address_key[0] == "jsonkey" and not (" " in text.strip() or text[:1].isupper()):
+            continue
         view = normalize.View(text)
         extra = []
         if rx is not None:

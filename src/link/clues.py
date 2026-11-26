@@ -277,7 +277,7 @@ def _conflicting(names: list[list[str]]) -> bool:
     return False
 
 
-def file_convention(parsed: ParsedFile) -> str:
+def file_texts(parsed: ParsedFile) -> list[str]:
     texts = []
     if parsed.fmt in ("csv", "tsv"):
         texts = parsed.header + [c for row in parsed.rows for c in row]
@@ -286,4 +286,9 @@ def file_convention(parsed: ParsedFile) -> str:
         texts += [p for path, _ in iter_leaves(parsed.data) for p in path[-1:] if isinstance(p, str)]
     else:
         texts = [parsed.text]
-    return dates.convention(texts)
+    return texts
+
+
+def file_convention(parsed: ParsedFile) -> str:
+    """The file's own convention (callers with all files use dates.conventions instead)."""
+    return getattr(parsed, "date_convention", None) or dates.convention(file_texts(parsed))

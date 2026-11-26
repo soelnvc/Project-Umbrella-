@@ -33,6 +33,7 @@ class ParsedFile:
     spans: dict = field(default_factory=dict)          # field address -> list[Span]
     field_types: dict = field(default_factory=dict)    # column or JSON path -> profiler type
     name_matcher: object = None                        # this file's names, for its file name
+    date_convention: str | None = None                 # "dmy" or "mdy", decided across files
 
 
 def _extension(in_rel: str) -> str:

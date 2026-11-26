@@ -46,6 +46,9 @@ def apply(parsed: ParsedFile, keys: Keys) -> None:
                 _set_json(parsed.data, path, apply_text(current, spans, keys))
             elif any(s.action == "zero" for s in spans):
                 _set_json(parsed.data, path, 0)
+            elif any(s.action == "replace" for s in spans):
+                # A number generalised to a band ("51" -> "50-54") becomes text.
+                _set_json(parsed.data, path, apply_text(str(current), spans, keys))
         elif kind == "jsonkey":
             _, parent_path, key = address
             chosen = [s for s in resolve(spans, key) if s.action != "keep"]

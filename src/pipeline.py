@@ -16,6 +16,7 @@ from src.detect import channels, engine
 from src.ingest.parsers import ParsedFile, parse
 from src.ingest.walker import walk
 from src.link.assign import link_files
+from src.privacy.planner import plan as plan_privacy
 from src.rewrite.apply import apply
 from src.rewrite.serialize import serialize
 from src.rewrite.spans import resolve
@@ -52,6 +53,20 @@ def _unique(path: str, used: set[str]) -> str:
 def _build(parsed: ParsedFile, keys) -> bytes:
     apply(parsed, keys)
     return serialize(parsed)
+
+
+def _set_date_conventions(ledger: Ledger, parsed_files: dict) -> None:
+    """Day-first or month-first per file; undecided files inherit their source's convention."""
+    from src.link import clues as clue_mod
+    from src.link import dates as date_mod
+    rows = []
+    for e in ledger.pending():
+        parsed = parsed_files[e.file_id]
+        texts = clue_mod.file_texts(parsed)
+        head = (parsed.text if parsed.fmt == "text" else " ".join(t for t in texts[:40] if isinstance(t, str)))[:600]
+        rows.append((e.file_id, e.in_rel, texts, head))
+    for file_id, conv in date_mod.conventions(rows).items():
+        parsed_files[file_id].date_convention = conv
 
 
 def run(inp: Path, out: Path) -> int:
@@ -94,10 +109,12 @@ def run(inp: Path, out: Path) -> int:
         ledger.advance(entry, "parsed")
 
     # Pass 2: link records across files and place each patient's fake ID inside the records.
+    files = [(e.file_id, e.sha256, parsed_files[e.file_id]) for e in ledger.pending()]
+    _set_date_conventions(ledger, parsed_files)
+    record_clues: dict = {}
     if not watchdog.expired():
         try:
-            files = [(e.file_id, e.sha256, parsed_files[e.file_id]) for e in ledger.pending()]
-            link_summary = link_files(files, keys)
+            link_summary, record_clues = link_files(files, keys)
             safety.log("linked", **link_summary)
         except Exception:  # noqa: BLE001
             # Linking is an improvement, not a requirement: without it every record stays unlinked.
@@ -105,6 +122,12 @@ def run(inp: Path, out: Path) -> int:
             for parsed in parsed_files.values():
                 for record in parsed.records:
                     record.pseudonym = None
+
+    # Pass 3: the privacy plan - one date shift, age band and place level per patient.
+    privacy_summary = {"records_generalized": 0}
+    if record_clues:
+        privacy_summary = plan_privacy(files, record_clues, keys, policy)
+        safety.log("privacy", **privacy_summary)
 
     # Pass 4: build each output in memory. The release gate (Step 12) will check it here.
     for entry in ledger.pending():
@@ -144,7 +167,7 @@ def run(inp: Path, out: Path) -> int:
         "records_processed": len(records),
         "identifiers_detected": sum(entities.values()),
         "records_linked": sum(r["patient"] is not None for r in records),
-        "records_generalized": 0,
+        "records_generalized": privacy_summary.get("records_generalized", 0),
         "records_suppressed": 0,
     })
     order = ["files_total", "files_sanitized", "files_quarantined", "records_processed",

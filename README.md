@@ -90,6 +90,16 @@ A captured word must look like a name: capitalised Latin or Devanagari, and not 
 
 On the practice data: precision 1.00, recall 0.98, no two people merged; both same-name pairs stay apart.
 
+## The privacy plan
+
+`src/privacy/` decides one treatment per patient and applies it in every record of that patient (a linked patient, or a single unlinked record that holds patient data). Settings are in `config/policy.yaml`.
+
+- **Dates:** each patient gets one shift of 30 to 180 days, earlier or later, from a keyed HMAC (subkey of `RAKSHA_SECRET`). Every date of the patient moves by it, including dates of birth, so intervals and stay lengths stay exact, and a different secret gives different shifts. Each date keeps its own format (order, separators, padding, month names, two-digit years). Day-first or month-first is decided per file; a file whose own dates cannot decide inherits the convention of its source (files sharing a hospital word, hospital name or record-number prefix).
+- **Ages:** one band per patient that holds every age the patient has in any record (5-year, then 10-year, 10-year offset by five, 20-year), top-coded at 90+. Ages in age fields, `52 Yrs/F`, `आयु: 39 वर्ष` and `65/F` are all replaced with the same band.
+- **Place:** village fields become the patient's tehsil (district for escalated patients); village mentions in free text stay `[VILLAGE]`; PIN codes keep three digits.
+- **Look-alike groups:** patients are grouped by gender, age band and place; a group smaller than k (5) is escalated, place first (tehsil to district), then the age band (to 10 years). Escalation stops there: k is counted over the patients in the data, while the attacker's population register is several times larger.
+- **High-risk patients:** a diagnosis or procedure held by three or fewer patients (the attacker's rarity rule), a stay length held by three or fewer patients, or an age of 85+ or 5 or under. Their rare diagnoses become the ICD-10 chapter (code and wording, in every record, including history lines such as `K/C/O addison's disease`); rare procedures become `Procedure (details withheld)`; their discharge dates move by one extra day, so an exact stay length no longer matches.
+
 ## The clinical shield
 
 `src/detect/shield.py` marks text that name and address detection must never remove. It covers the ten scored trap groups and the rest of the clinical record:
@@ -134,6 +144,7 @@ A single file ledger tracks every input file from start to finish, so no file is
 | `src/ingest/` | file walk, format detection from content, encoding rules, parsers, depth-proof JSON |
 | `src/detect/` | identifier and name patterns, the column and field profiler, the detection engine, field and label words |
 | `src/link/` | transliteration, phonetic name keys, date reading, linking clues, clustering, fake IDs and their placement |
+| `src/privacy/` | quasi-identifier mentions, the per-patient privacy plan, ICD-10 chapters |
 | `src/rewrite/` | the span writer, applying spans to fields, writing each file back in its original format |
 | `config/lexicons/` | name lists, medical word lists (drugs, symptoms, eponyms, clinical terms, Hindi medical words), grammar words, Uttar Pradesh districts |
 | `config/policy.yaml` | privacy settings |

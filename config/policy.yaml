@@ -7,6 +7,8 @@ extreme_age_high: 85
 extreme_age_low: 5
 geo_default: tehsil
 geo_ladder: tehsil,district,withheld
+geo_escalation_max: district
+age_escalation_max: 10
 pin_mode: prefix3
 date_shift_min_days: 30
 date_shift_max_days: 180
@@ -14,7 +16,8 @@ dob_mode: shift
 rare_condition_max_profiles: 3
 rare_los_hospital_max_profiles: 3
 rare_condition_action: icd_chapter
-los_jitter_high_risk: false
+rare_procedure_generalize: true
+los_jitter_high_risk: true
 keep_encounter_ids: false
 utility_floor: 0.60
 link_threshold: high

@@ -28,8 +28,11 @@ def _place(parsed, loc: str, psn: str) -> bool:
     return placed
 
 
-def link_files(files: list[tuple[int, str, object]], keys: Keys) -> dict[str, int]:
-    """files: (file_id, sha256, parsed). Sets record.pseudonym; returns summary counts."""
+def link_files(files: list[tuple[int, str, object]], keys: Keys) -> tuple[dict[str, int], dict]:
+    """files: (file_id, sha256, parsed). Sets record.pseudonym.
+
+    Returns summary counts and the clues of every record, keyed by (file_id, loc).
+    """
     records = []
     owners = []
     for file_id, sha256, parsed in files:
@@ -53,5 +56,5 @@ def link_files(files: list[tuple[int, str, object]], keys: Keys) -> dict[str, in
         record.pseudonym = names[group]
         linked += 1
         placed += _place(parsed, record.loc, record.pseudonym)
-    return {"records": len(records), "with_patient": linked, "placed": placed,
-            "patients": len(names)}
+    summary = {"records": len(records), "with_patient": linked, "placed": placed, "patients": len(names)}
+    return summary, {(rc.file_id, rc.loc): rc for rc in records}
