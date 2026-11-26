@@ -22,6 +22,7 @@ PLACEHOLDERS = {
     "ADDRESS": "[ADDRESS]",
     "VILLAGE": "[VILLAGE]",
     "PIN": "[PIN]",
+    "DOB": "[DOB]",
 }
 _DIGITS = str.maketrans("०१२३४५६७८९", "0123456789")
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"

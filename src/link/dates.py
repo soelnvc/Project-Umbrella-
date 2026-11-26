@@ -16,6 +16,7 @@ MONTHS.update({"sept": 9, "january": 1, "february": 2, "march": 3, "april": 4, "
 _DIGITS = str.maketrans("०१२३४५६७८९", "0123456789")
 NUMERIC = re.compile(r"(?<!\d)(\d{1,4})([-/.])(\d{1,2})\2(\d{2,4})(?!\d)")
 NAMED = re.compile(r"(?i)(?<![A-Za-z\d])(\d{1,2})[-/ .]([A-Za-z]{3,9})[-/ .,]*(\d{2,4})(?!\d)")
+NAMED_MDY = re.compile(r"(?i)(?<![A-Za-z\d])([A-Za-z]{3,9})[-/ .]+(\d{1,2})(?:[-/ .]+|,\s*)(\d{2,4})(?!\d)")
 _MDY_HINT = re.compile(r"(?i)mm\s*[-/.]\s*dd")
 _DMY_HINT = re.compile(r"(?i)dd\s*[-/.]\s*mm")
 
@@ -124,6 +125,14 @@ def parse_all(text: str, conv: str = "dmy") -> list[tuple[int, int, dt.date]]:
             out.append((m.start(), m.end(), dt.date(_year(int(m.group(3))), month, int(m.group(1)))))
         except ValueError:
             continue
+    for m in NAMED_MDY.finditer(s):
+        month = MONTHS.get(m.group(1).lower())
+        if not month:
+            continue
+        try:
+            out.append((m.start(), m.end(), dt.date(_year(int(m.group(3))), month, int(m.group(2)))))
+        except ValueError:
+            continue
     return sorted(out)
 
 
@@ -163,5 +172,11 @@ def reformat(original: str, new: dt.date, conv: str = "dmy") -> str:
         day, month, year = m.group(1), m.group(2), m.group(3)
         y = str(new.year)[-2:] if len(year) == 2 else str(new.year)
         return (s[:m.start(1)] + _width(new.day, day) + s[m.end(1):m.start(2)] + _month_name(new.month, month)
+                + s[m.end(2):m.start(3)] + y + s[m.end(3):])
+    m = NAMED_MDY.fullmatch(s)
+    if m:
+        month, day, year = m.group(1), m.group(2), m.group(3)
+        y = str(new.year)[-2:] if len(year) == 2 else str(new.year)
+        return (s[:m.start(1)] + _month_name(new.month, month) + s[m.end(1):m.start(2)] + _width(new.day, day)
                 + s[m.end(2):m.start(3)] + y + s[m.end(3):])
     return new.isoformat()

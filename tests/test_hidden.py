@@ -186,3 +186,19 @@ def test_folder_with_personal_data_is_renamed_and_reported(tmp_path, monkeypatch
     report = json.loads((out / "report.json").read_text())
     assert report["files"][0]["output"] == "sanitized/" + files[0]
     assert "Anita" not in (out / "report.json").read_text()
+
+
+def test_lowercase_filename_with_hindi_body_and_shared_dirty_folder(tmp_path, monkeypatch):
+    monkeypatch.setenv("RAKSHA_SECRET", "s")
+    inp = tmp_path / "in"
+    (inp / "notes").mkdir(parents=True)
+    (inp / "notes" / "vrekon_talmir_note.txt").write_text("मरीज़ का नाम: व्रेकोन तालमिर\nबुखार है।\n")
+    (inp / "exports" / "Vrekon_Talmir").mkdir(parents=True)
+    (inp / "exports" / "Vrekon_Talmir" / "a.txt").write_text("Name: Vrekon Talmir\n")
+    (inp / "exports" / "Vrekon_Talmir" / "b.txt").write_text("BP 120/80\n")
+    out = tmp_path / "out"
+    assert pipeline.run(inp, out) == 0
+    rels = sorted(p.relative_to(out / "sanitized").as_posix() for p in (out / "sanitized").rglob("*") if p.is_file())
+    assert any(r.startswith("notes/doc_") for r in rels)
+    exp = [r for r in rels if r.startswith("exports/")]
+    assert len(exp) == 2 and exp[0].split("/")[1] == exp[1].split("/")[1] and exp[0].split("/")[1].startswith("dir_")

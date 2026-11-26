@@ -189,8 +189,22 @@ def find_labelled_names(text: str) -> list[Span]:
     return spans
 
 
+_DOB_FALLBACK = re.compile(
+    r"(?i)(?:(?<![A-Za-z])dob|d\.o\.b\.?|date\s+of\s+birth|birth\s*(?:date|dt|day)|janam\s*(?:din|tithi)|"
+    r"janm\s*tithi|जन्म\s*तिथि)\s*(?:\([^)\n]{1,20}\))?\s*[:\-]\s*"
+    r"(?P<dt>\d{1,4}[-/.]\d{1,2}[-/.]\d{2,4}|\d{1,2}[-/ .][A-Za-z]{3,9}[-/ .,]*\d{2,4}|"
+    r"[A-Za-z]{3,9}[-/ .]+\d{1,2}(?:[-/ .]+|,\s*)\d{2,4})")
+
+
+def find_labelled_dobs(text: str) -> list[Span]:
+    """Fallback DOB spans so birth dates never survive if linking or privacy planning is skipped."""
+    s = text.translate(_DIGITS)
+    return [Span(view=-1, start=m.start("dt"), end=m.end("dt"), type="DOB", role="patient",
+                 action="redact", source="dob", priority=P_LABEL) for m in _DOB_FALLBACK.finditer(s)]
+
+
 def find_all(text: str) -> list[Span]:
-    return find_identifiers(text) + find_labelled_names(text)
+    return find_identifiers(text) + find_labelled_names(text) + find_labelled_dobs(text)
 
 
 # --------------------------------------------------------------------------- whole-value shapes

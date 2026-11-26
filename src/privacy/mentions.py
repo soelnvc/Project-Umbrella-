@@ -27,7 +27,7 @@ class Mention:
 
 _ADMISSION = re.compile(r"(?i)(?:date\s+of\s+admission|admitted\s+on|admission\s+date|doa|bharti|भर्ती)")
 _DISCHARGE = re.compile(r"(?i)(?:date\s+of\s+discharge|discharged\s+on|discharge\s+date|dod|chhutti|छुट्टी)")
-_DOB = re.compile(r"(?i)(?:dob|d\.o\.b|date\s+of\s+birth|birth|janm|जन्म)")
+_DOB = re.compile(r"(?i)(?:\bdob\b|d\.o\.b|date\s+of\s+birth|birth\s*(?:date|dt|day)|birthdate|janam|janm|जन्म)")
 _AGE_SEX = re.compile(rf"(?i)(?<![\d.])(?P<age>\d{{1,3}})\s*(?:y(?:rs?|ears?)?\.?|वर्ष|साल)?\s*[/,]\s*"
                       rf"(?:m|f|male|female|पुरुष|महिला)(?![A-Za-z{DEVA}])")
 _AGE_LABEL = re.compile(rf"(?i)(?<![A-Za-z])(?:age|aayu|umr|umar)(?![A-Za-z])\s*(?:/\s*sex)?\s*[:\-]?\s*(?P<age>\d{{1,3}})\b"
@@ -40,8 +40,9 @@ _DX_ITEM = re.compile(r"(?P<text>[^;()\n]+?)\s*\(\s*(?P<code>[A-Z]\d{2}(?:\.\d{1
 _PROC_LINE = re.compile(r"(?im)^(?P<label>\s*(?:procedure|operation|surgery(?:\s+done)?)\s*[:\-]\s*)(?P<body>[^\n]*)$")
 
 
-def _date_context(hint: str, text: str, start: int) -> str:
-    probe = hint + " " + text[max(0, start - 35):start]
+def _date_context(hint: str, text: str, start: int, prev_end: int = 0) -> str:
+    before = text[max(prev_end, start - 60):start].rsplit("\n", 1)[-1]
+    probe = hint + " " + before
     if _DOB.search(probe):
         return "dob"
     if _DISCHARGE.search(probe) or hint.endswith("period/end") or hint.endswith("end"):
@@ -76,8 +77,10 @@ def _valid_age(value: int) -> bool:
 
 def field_mentions(hint: str, text: str, conv: str, fhir_type: str | None = None) -> list[Mention]:
     out: list[Mention] = []
+    prev_end = 0
     for start, end, value in dates.parse_all(text, conv):
-        out.append(Mention(start, end, "date", value, _date_context(hint, text, start)))
+        out.append(Mention(start, end, "date", value, _date_context(hint, text, start, prev_end)))
+        prev_end = max(prev_end, end)
     last = hint.split("/")[-1].lower()
     stripped = text.strip()
     lead = len(text) - len(text.lstrip())

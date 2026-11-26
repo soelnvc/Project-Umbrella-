@@ -127,8 +127,15 @@ def run(inp: Path, out: Path) -> int:
     used_paths: set[str] = set()
 
     # Pass 1: ingest and detect. Files are only read here; nothing is written yet.
+    dirty_dirs: set[str] = set()
+    parsed_entries = []
     for in_rel, path in walk(inp):
-        raw = path.read_bytes()
+        try:
+            raw = path.read_bytes()
+        except OSError:
+            entry = ledger.discover(in_rel, "")
+            ledger.quarantine(entry, "processing_error")
+            continue
         entry = ledger.discover(in_rel, hashlib.sha256(raw).hexdigest())
         if watchdog.expired():
             ledger.quarantine(entry, "time_budget")
@@ -140,14 +147,26 @@ def run(inp: Path, out: Path) -> int:
             record.file_id = entry.file_id
         entry.fmt = parsed.fmt
         entry.records_count = len(parsed.records)
-        ok, out_rel = safety.guarded(ledger, entry, channels.renamed_path, in_rel, entry.sha256, keys,
-                                     parsed.name_matcher)
+        seed_folds = getattr(parsed, "seed_folds", None)
+        ok, dp = safety.guarded(ledger, entry, channels.dirty_prefixes, in_rel, parsed.name_matcher, seed_folds)
         if not ok:
+            continue
+        dirty_dirs |= dp
+        parsed_files[entry.file_id] = parsed
+        sources[entry.file_id] = path
+        parsed_entries.append(entry)
+
+    for entry in parsed_entries:
+        parsed = parsed_files[entry.file_id]
+        seed_folds = getattr(parsed, "seed_folds", None)
+        ok, out_rel = safety.guarded(ledger, entry, channels.renamed_path, entry.in_rel, entry.sha256, keys,
+                                     parsed.name_matcher, seed_folds, dirty_dirs)
+        if not ok:
+            parsed_files.pop(entry.file_id, None)
+            sources.pop(entry.file_id, None)
             continue
         entry.out_rel = _unique(out_rel, used_paths)
         used_paths.add(entry.out_rel)
-        parsed_files[entry.file_id] = parsed
-        sources[entry.file_id] = path
         ledger.advance(entry, "parsed")
 
     privacy_summary: dict = {"records_generalized": 0}
@@ -156,9 +175,13 @@ def run(inp: Path, out: Path) -> int:
         if round_no > 0:
             # Start again from the input so the plan only describes what will be released.
             for e in candidates:
+                if watchdog.expired():
+                    ledger.quarantine(e, "time_budget")
+                    staged.pop(e.file_id, None)
+                    continue
                 ledger.rewind(e, "parsed")
                 staged.pop(e.file_id, None)
-                ok, parsed = safety.guarded(ledger, e, _read, e.in_rel, sources[e.file_id].read_bytes(), keys)
+                ok, parsed = safety.guarded(ledger, e, lambda p=sources[e.file_id], r=e.in_rel: _read(r, p.read_bytes(), keys))
                 if ok:
                     for record in parsed.records:
                         record.file_id = e.file_id
@@ -194,6 +217,9 @@ def run(inp: Path, out: Path) -> int:
         # Pass 4: build every output in memory and pass it through the release gate.
         refused = 0
         for e in candidates:
+            if watchdog.expired():
+                ledger.quarantine(e, "time_budget")
+                continue
             ok, result = safety.guarded(ledger, e, _build_and_check, parsed_files[e.file_id], keys)
             if not ok:
                 refused += 1

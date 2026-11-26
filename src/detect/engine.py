@@ -378,6 +378,8 @@ def detect(parsed: ParsedFile, keys: Keys | None = None) -> None:
             parsed.spans[("text",)] = spans
     found, rx, core_rx = _spread_names(parsed, views)
     parsed.name_matcher = rx
+    from src.link import phonetic
+    parsed.seed_folds = frozenset(f for t in found if len(f := phonetic.fold(t)) >= 3)
     if keys is not None:
         _clean_encoded(parsed, views, found, rx, core_rx, keys)
 

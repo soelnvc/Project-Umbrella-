@@ -152,6 +152,22 @@ def test_indexed_leak_finder_matches_a_direct_scan():
 def test_repair_removes_plain_leaks():
     fixed = gate.repair(b"Ram Kumar, ph 98765 43210", [("NAME", "Ram Kumar"), ("DIGITS", "9876543210")])
     assert fixed == b"[NAME], ph [ID]"
+    # Doctor sharing a leaked name stays intact; JSON numeric leak becomes 0
+    doc_fixed = gate.repair(b'{"dr": "Dr. Ram Kumar", "pt": "Ram Kumar", "ph": 9876543210}',
+                            [("NAME", "Ram Kumar"), ("DIGITS", "9876543210")])
+    assert json.loads(doc_fixed.decode()) == {"dr": "Dr. Ram Kumar", "pt": "[NAME]", "ph": 0}
+
+
+def test_dob_withheld_even_when_linking_fails(tmp_path, monkeypatch):
+    monkeypatch.setenv("RAKSHA_SECRET", "s")
+    inp = tmp_path / "in"
+    inp.mkdir()
+    (inp / "n.txt").write_text("Patient Name: Ravi Kumar\nDOB: 12/04/1977\n")
+    monkeypatch.setattr(pipeline, "link_files", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    out = tmp_path / "out"
+    assert pipeline.run(inp, out) == 0
+    text = next(p.read_text() for p in (out / "sanitized").rglob("*.txt"))
+    assert "1977" not in text and "[DOB]" in text
 
 
 def _two_files(tmp_path, monkeypatch):

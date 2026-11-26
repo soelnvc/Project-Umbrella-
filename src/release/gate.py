@@ -18,6 +18,7 @@ import re
 import unicodedata
 from collections import Counter
 
+from src.detect.patterns import _DIGITS as _INDIC_DIGITS
 from src.ingest import jsontree
 from src.ingest.parsers import ParsedFile
 from src.release import fhir_check
@@ -28,6 +29,7 @@ NAME_TYPES = ("PATIENT_NAME", "RELATIVE_NAME")
 DIGIT_TYPES = ("PHONE", "AADHAAR", "ABHA_NUMBER", "MRN")
 TEXT_TYPES = ("EMAIL", "PAN", "INSURANCE_ID")
 _B64 = re.compile(r"[A-Za-z0-9+/]{24,}={0,2}")
+_HEX = re.compile(r"(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{2}){12,}(?![0-9A-Fa-f])")
 
 
 def _norm(s: str) -> str:
@@ -41,6 +43,13 @@ def _with_decoded(text: str) -> str:
         try:
             extra.append(base64.b64decode(tok + "=" * (-len(tok) % 4)).decode("utf-8", errors="ignore"))
         except (binascii.Error, ValueError):
+            pass
+    for m in _HEX.finditer(text):
+        try:
+            dec = bytes.fromhex(m.group(0)).decode("utf-8", errors="strict")
+            if sum(ch.isprintable() or ch.isspace() for ch in dec) >= 0.9 * max(1, len(dec)):
+                extra.append(dec)
+        except ValueError:
             pass
     return text + "\n" + "\n".join(extra) if extra else text
 
@@ -124,7 +133,7 @@ def leak_targets(parsed: ParsedFile, views) -> tuple[list[tuple[str, str]], dict
             if span.type in NAME_TYPES and len(original.split()) >= 2 and span.source != "propagation":
                 targets.add(("NAME", original))
             elif span.type in DIGIT_TYPES:
-                digits = re.sub(r"\D", "", original)
+                digits = re.sub(r"\D", "", original.translate(_INDIC_DIGITS))
                 if len(digits) >= 6 and span.source not in ("propagation", "path"):
                     targets.add(("DIGITS", digits[-10:] if span.type == "PHONE" else digits))
             elif span.type in TEXT_TYPES and len(original) >= 6:
@@ -174,11 +183,12 @@ def _name_counts(hay: str, names) -> Counter:
 
 def _digit_index(raw: str, lengths: set[int]) -> set[str]:
     """Every digit string of the given lengths that the separator-tolerant pattern would match."""
+    raw = raw.translate(_INDIC_DIGITS)
     found = set()
     for m in _DIGIT_RUN.finditer(raw):
         digits, bounds = [], {0}
         for ch in m.group(0):
-            if ch.isdigit():
+            if "0" <= ch <= "9":
                 digits.append(ch)
             else:
                 bounds.add(len(digits))
@@ -226,15 +236,28 @@ def find_leaks(data: bytes, targets, allowed) -> list[tuple[str, str]]:
     return found
 
 
+_DOC_PREFIX_BEFORE = re.compile(r"(?i)(?:(?<![A-Za-z])Dr|Doctor|डॉ|डा)\.?[ \t]+$")
+
+
 def repair(data: bytes, leaks) -> bytes:
     """One attempt: replace leftover plain-text occurrences (encoded ones are left for quarantine)."""
     text = data.decode("utf-8")
     for kind, value in leaks:
         if kind == "NAME":
             rx = re.compile(rf"(?<![A-Za-z\u0900-\u097F]){re.escape(value)}(?![A-Za-z\u0900-\u097F])", re.IGNORECASE)
-            text = rx.sub("[NAME]", text)
+            text = rx.sub(
+                lambda m, t=text: m.group(0) if _DOC_PREFIX_BEFORE.search(t[max(0, m.start() - 12):m.start()]) else "[NAME]",
+                text,
+            )
         elif kind == "DIGITS":
-            text = _digit_rx(value).sub("[ID]", text)
+            rx = _digit_rx(value)
+            def _sub_digit(m, t=text):
+                before = t[max(0, m.start() - 4):m.start()]
+                after = t[m.end():m.end() + 4]
+                if re.search(r":\s*$", before) and re.match(r"\s*[,}\]]", after):
+                    return "0"
+                return "[ID]"
+            text = rx.sub(_sub_digit, text)
         else:
             text = re.compile(re.escape(value), re.IGNORECASE).sub("[REDACTED]", text)
     return text.encode("utf-8")

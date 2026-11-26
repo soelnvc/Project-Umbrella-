@@ -29,6 +29,7 @@ def test_age_band_holds_every_age(ages, step, band):
 @pytest.mark.parametrize("original,conv,expected", [
     ("12/04/1977", "dmy", "03/12/2025"), ("01/13/2026", "mdy", "12/03/2025"), ("2026-04-02", "dmy", "2025-12-03"),
     ("5-5-2026", "dmy", "3-12-2025"), ("12-Apr-1977", "dmy", "03-Dec-2025"), ("11/09/26", "dmy", "03/12/25"),
+    ("Apr 12, 1977", "dmy", "Dec 03, 2025"), ("April 5, 2026", "dmy", "December 3, 2025"),
 ])
 def test_shifted_dates_keep_their_format(original, conv, expected):
     assert dates.reformat(original, dt.date(2025, 12, 3), conv) == expected
@@ -60,6 +61,12 @@ def test_mentions_find_contexts_and_skip_durations():
     contexts = {m.context for m in found if m.kind == "date"}
     ages = [m.value for m in found if m.kind == "age"]
     assert contexts == {"admission", "discharge"} and ages == [52]
+
+    # A visit date after a DOB on the same line must not inherit the DOB context
+    same_line = field_mentions("", "DOB: Apr 12, 1977   Date: 07/02/2026", "dmy")
+    assert [(m.value, m.context) for m in same_line if m.kind == "date"] == [
+        (dt.date(1977, 4, 12), "dob"), (dt.date(2026, 2, 7), "other")
+    ]
 
 
 def _run(tmp_path, monkeypatch, secret="s"):
