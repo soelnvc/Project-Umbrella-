@@ -107,7 +107,7 @@ _ID_THEN_NAME = re.compile(rf"(?:^|\s)[A-Z][A-Za-z]{{0,5}}[-/_]?\d[\d\-/]{{3,}}\
 
 
 def _names_after_ids(head: str) -> list[Span]:
-    """Header cells such as "JJH-0077112 Zainab": a name right after a record number."""
+    """Header cells such as "HOSP-0012345 Zainab": a name right after a record number."""
     return [Span(view=-1, start=m.start("name"), end=m.end("name"), type="PATIENT_NAME", role="patient",
                  action="redact", source="header", priority=28) for m in _ID_THEN_NAME.finditer(head)]
 

@@ -19,7 +19,7 @@ from src.link.clues import RecordClues
 STRONG = ("AADHAAR", "ABHA_NUMBER", "PAN", "EMAIL", "MRN")
 SHARED_IN_HOUSEHOLDS = ("PHONE", "INSURANCE_ID")
 UNIQUE_IDS = ("AADHAAR", "ABHA_NUMBER")
-MAX_BLOCK = 60
+MAX_COMPOUND_REPS = 80
 
 
 def _years_compatible(a: RecordClues, b: RecordClues) -> bool:
@@ -134,22 +134,52 @@ def link(records: list[RecordClues]) -> list[int | None]:
         for other in members[1:]:
             edges.append((rank, f"{kind}:{value}", members[0], other))
 
-    blocks: dict[str, list[int]] = defaultdict(list)
+    # Compound blocking on (name skeleton, second clue): every pair that can pass _name_link
+    # shares at least one (dob | relative skeleton | village skeleton) key, so common surnames
+    # stay small and never suffer arbitrary truncation on large datasets.
+    blocks: dict[tuple, list[int]] = defaultdict(list)
     for i in eligible:
-        for tokens in records[i].names:
-            for token in tokens:
-                key = phonetic.skeleton(token)
-                if key:
-                    blocks[key].append(i)
+        r = records[i]
+        name_skels = {s for tokens in r.names for token in tokens if (s := phonetic.skeleton(token))}
+        if not name_skels:
+            continue
+        dob_key = r.dob.isoformat() if r.dob else None
+        rel_skels = {s for _, rtoks in r.relatives for rt in rtoks if (s := phonetic.skeleton(rt))}
+        vil_key = tuple(phonetic.skeleton(w) for w in r.village.split()) if r.village else ()
+        for ns in name_skels:
+            if dob_key:
+                blocks[("dob", ns, dob_key)].append(i)
+            for rs in rel_skels:
+                blocks[("rel", ns, rs)].append(i)
+            if vil_key and r.birth_years:
+                blocks[("vil", ns, vil_key)].append(i)
+    seen_pairs: set[tuple[int, int]] = set()
     for key, members in sorted(blocks.items()):
         members = sorted(set(members))
-        if len(members) > MAX_BLOCK:
-            members = members[:MAX_BLOCK]
-        for x in range(len(members)):
-            for y in range(x + 1, len(members)):
-                a, b = members[x], members[y]
+        if len(members) < 2:
+            continue
+        # Group identical clue signatures first so repeated rows in bulk exports link in O(n).
+        by_sig: dict[tuple, list[int]] = defaultdict(list)
+        for m in members:
+            by_sig[_conflict_key(records[m]) + (records[m].village,)].append(m)
+        reps: list[int] = []
+        for group_members in by_sig.values():
+            head = group_members[0]
+            reps.append(head)
+            if len(group_members) > 1 and _name_link(records[head], records[head]):
+                for dup in group_members[1:]:
+                    edges.append((2, f"name:{key[0]}:{key[1]}", head, dup))
+        if len(reps) > MAX_COMPOUND_REPS:
+            reps = reps[:MAX_COMPOUND_REPS]
+        for x in range(len(reps)):
+            for y in range(x + 1, len(reps)):
+                a, b = reps[x], reps[y]
+                pair = (a, b) if a < b else (b, a)
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
                 if _name_link(records[a], records[b]):
-                    edges.append((2, f"name:{key}", a, b))
+                    edges.append((2, f"name:{key[0]}:{key[1]}", a, b))
 
     for rank, _, a, b in sorted(edges):
         clusters.union(a, b, strict=rank == 2)

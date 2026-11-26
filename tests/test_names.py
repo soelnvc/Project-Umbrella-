@@ -137,3 +137,11 @@ def test_json_address_fields():
     out = json.loads(clean_file("registration/d.json", json.dumps(data)))["patients"][0]["address"]
     assert out == {"line": "[ADDRESS], [ADDRESS], [ADDRESS], [ADDRESS]", "village": "[VILLAGE]",
                    "tehsil": "Bilgram", "district": "Hardoi", "pin": "241***"}
+
+
+def test_non_up_indian_districts_in_city_fields_are_kept():
+    bundle = {"resourceType": "Bundle", "entry": [{"resource": {
+        "resourceType": "Patient", "name": [{"text": "Ramesh Sharma"}],
+        "address": [{"city": "Jaipur", "postalCode": "302001"}]}}]}
+    out = json.loads(clean_file("fhir/b.json", json.dumps(bundle)))["entry"][0]["resource"]["address"][0]
+    assert out["city"] == "Jaipur" and out["postalCode"] == "302***"

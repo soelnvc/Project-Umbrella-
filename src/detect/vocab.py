@@ -114,6 +114,9 @@ CLINICAL = _load("clinical_terms.txt")
 HINDI_MEDICAL = _load("hindi_medical.txt")
 HINGLISH_FUNCTION = _load("hinglish_function_words.txt")
 DISTRICT_WORDS, DISTRICT_PHRASES = _split(_load("districts_up.txt"))
+INDIA_DISTRICT_WORDS, INDIA_DISTRICT_PHRASES = _split(
+    (_load("districts_up.txt") | _load("districts_india.txt")) - ALL_NAMES
+)
 MEDICAL_WORDS = DRUGS | SYMPTOMS | CLINICAL | HINDI_MEDICAL | DISTRICT_WORDS
 LOWER_CASE_ONLY = SYMPTOMS_HINGLISH | HINGLISH_FUNCTION
 COMMON_WORDS = _load("common_words.txt") | _load("hindi_common.txt")

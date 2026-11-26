@@ -45,10 +45,11 @@ def link_files(files: list[tuple[int, str, object]], keys: Keys) -> tuple[dict[s
     """
     records = []
     owners = []
+    ref_year = clues.dataset_year(files)
     for file_id, sha256, parsed in files:
         conv = clues.file_convention(parsed)
         for record in parsed.records:
-            rc = clues.extract(parsed, record.loc, sha256, conv)
+            rc = clues.extract(parsed, record.loc, sha256, conv, ref_year=ref_year)
             rc.file_id = file_id
             records.append(rc)
             owners.append((parsed, record))

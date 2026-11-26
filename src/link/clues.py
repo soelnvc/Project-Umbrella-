@@ -171,7 +171,7 @@ def _patient_resource(parsed: ParsedFile, address: tuple) -> bool:
     return _resource_type(parsed.data, address[1])[0] == "Patient"
 
 
-def extract(parsed: ParsedFile, loc: str, sha256: str, conv: str) -> RecordClues:
+def extract(parsed: ParsedFile, loc: str, sha256: str, conv: str, ref_year: int = 2026) -> RecordClues:
     rc = RecordClues(file_id=-1, loc=loc, sha256=sha256)
     patient_names: list[list[str]] = []
     field_parts: list[str] = []
@@ -185,7 +185,9 @@ def extract(parsed: ParsedFile, loc: str, sha256: str, conv: str) -> RecordClues
                 if not tokens:
                     continue
                 if span.source == "field":
-                    field_parts.extend(tokens)
+                    for tok in tokens:
+                        if tok not in field_parts:
+                            field_parts.append(tok)
                 else:
                     patient_names.append(tokens)
                     if span.source in STRONG_NAME_SOURCES:
@@ -253,7 +255,7 @@ def extract(parsed: ParsedFile, loc: str, sha256: str, conv: str) -> RecordClues
             tolerance = 5 if age % 5 == 0 else 2
             years.append((event_year - age, tolerance))
         else:
-            years.append((2026 - age, 6))
+            years.append((ref_year - age, 6))
     if rc.dob:
         years.append((rc.dob.year, 1))
     rc.birth_years = years
@@ -299,3 +301,19 @@ def file_texts(parsed: ParsedFile) -> list[str]:
 def file_convention(parsed: ParsedFile) -> str:
     """The file's own convention (callers with all files use dates.conventions instead)."""
     return getattr(parsed, "date_convention", None) or dates.convention(file_texts(parsed))
+
+
+def dataset_year(files: list[tuple[int, str, ParsedFile]]) -> int:
+    """Typical event year of the dataset, used when an undated record gives only an age."""
+    years: list[int] = []
+    for _, _, parsed in files:
+        conv = file_convention(parsed)
+        for text in file_texts(parsed)[:60]:
+            for _, _, d in dates.parse_all(text, conv)[:4]:
+                if 1995 <= d.year <= 2100:
+                    years.append(d.year)
+    if not years:
+        return 2026
+    years.sort()
+    # Use the upper quartile so recent visit dates win over historical dates of birth.
+    return years[(3 * len(years)) // 4]

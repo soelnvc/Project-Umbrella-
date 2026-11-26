@@ -63,7 +63,7 @@ def source_words(name: str, text_head: str) -> set[str]:
     words = {w for w in re.findall(r"[a-z]{4,}", name.lower()) if w not in _GENERIC_NAME_WORDS}
     for m in re.finditer(r"((?:[A-Z][A-Za-z]+\s+){1,4})(?:Hospital|Sadan|Clinic|Labs?)\b", text_head):
         words.add(re.sub(r"\s+", " ", m.group(1)).strip().lower())
-    # Record-number prefixes ("ADM000178", "SNJ/26/...") also tie a file to its hospital.
+    # Record-number prefixes ("HOSP000178", "REG/26/...") also tie a file to its hospital.
     for m in re.finditer(r"(?<![A-Za-z])([A-Za-z]{2,6})[-/_]?\d{3,}", name + " " + text_head):
         words.add("id:" + m.group(1).upper())
     return words

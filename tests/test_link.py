@@ -165,3 +165,29 @@ def test_pseudonym_survives_trimmed_name_span_and_never_claims_unplaced(tmp_path
     assert psn and psn.startswith("PSN-")
     assert f"Name: {psn} Paracetamol 650 mg" in (out / "sanitized/n.txt").read_text()
     assert recs["sanitized/rel_only.txt"] is None
+
+
+def test_compound_blocking_links_past_sixty_same_surname_records():
+    # 100 distinct patients sharing surname "Sharma" + record 200 matching patient 95 by DOB
+    records = [rec(i, names=names(f"Person{i} Sharma"), dob=dt.date(1970, 1, 1) + dt.timedelta(days=i))
+               for i in range(100)]
+    records.append(rec(200, names=names("Person95 Sharma"), dob=dt.date(1970, 1, 1) + dt.timedelta(days=95)))
+    groups = link(records)
+    assert groups[95] == groups[100]
+    assert len({groups[i] for i in range(100)}) == 100
+
+
+def test_dataset_year_links_historical_cohort(tmp_path, monkeypatch):
+    monkeypatch.setenv("RAKSHA_SECRET", "s")
+    inp = tmp_path / "in"
+    inp.mkdir()
+    (inp / "reg.csv").write_text(
+        "Patient Name,DOB,Gaon,Visit Date\n"
+        "Mahesh Chauhan,12/04/1981,Durgamau Kalan,15/05/2021\n"
+        "Sita Verma,10/06/1991,Bhimpur,20/05/2021\n")
+    (inp / "note.txt").write_text("Name: Mahesh Chauhan   Age/Sex: 40/M\nAddress: Gram Durgamau Kalan, Tehsil Lalganj\n")
+    out = tmp_path / "out"
+    assert pipeline.run(inp, out) == 0
+    recs = [json.loads(l) for l in (out / "records.jsonl").read_text().splitlines()]
+    by_loc = {(r["file"], r["loc"]): r["patient"] for r in recs}
+    assert by_loc[("sanitized/reg.csv", "row:0")] == by_loc[("sanitized/note.txt", "doc")]

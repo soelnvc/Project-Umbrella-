@@ -55,7 +55,8 @@ def _lexicon_hit(value: str) -> bool:
 
 def _district(value: str) -> bool:
     low = " ".join(value.casefold().split())
-    return low in vocab.DISTRICT_WORDS or low in vocab.DISTRICT_PHRASES
+    return (low in vocab.DISTRICT_WORDS or low in vocab.DISTRICT_PHRASES
+            or low in vocab.INDIA_DISTRICT_WORDS or low in vocab.INDIA_DISTRICT_PHRASES)
 
 
 def classify(values: list[str], hint: str) -> str:

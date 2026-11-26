@@ -55,7 +55,7 @@ def name_tokens(name: str) -> list[str]:
                 _ABBREVIATIONS[low] in ("mohammad", "kumar"):
             continue
         f = fold(raw)
-        if len(f) < 2 or f in ("mohamad", "mohammad", "kumar", "devi", "singh", "kaur", "bano", "begum", "lal"):
+        if len(f) < 2 or f in ("mohamad", "mohammad", "kumar", "devi", "sing", "singh", "kaur", "bano", "begum", "lal"):
             continue
         out.append(f)
     return out
