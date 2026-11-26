@@ -68,6 +68,16 @@ A captured word must look like a name: capitalised Latin or Devanagari, and not 
 
 **Name spreading (same file only).** A name found confidently (a name field, a label, a relation marker, an honorific, a timeline or chat sender) is searched for everywhere else in the same file, in any letter case, so `Mohd. Shahid` in a note is removed once `मरीज़ का नाम: …` or a registration column named him. Names never spread across files. Generic name parts, common words, medical words and districts are never spread, and doctor names stay protected.
 
+## Hidden places
+
+- **Disguised text:** detection runs on a normalised view (HTML entities and %-encoding decoded, zero-width characters removed, Cyrillic and Greek look-alike letters folded to Latin, NFKC for full-width forms). Each match is mapped back to the exact original characters, so the replacement lands in the original text.
+- **Encoded payloads:** base64 and hex runs that decode to readable text are cleaned with the same detectors, using the file's own names, and written back in the same encoding (FHIR attachments stay valid base64). Binary payloads such as scanned images are replaced with an encoded `[ATTACHMENT REMOVED]`.
+- **JSON keys:** a key that is a record number becomes the same keyed token the number gets as a value, so references still match; a key that is a name becomes a keyed `NAME-XXXXXXXX` token. Key order and structure are kept.
+- **CSV headers:** identifiers, names after a record number (`JJH-0077112 Zainab`) and listed names are removed.
+- **Paths and export metadata:** in a path-shaped value, a folder that pairs a name with a 5 to 8 digit number (`Anita_Sharma_010565`) is a patient folder. Record-number digit cores found in a file (`010565` from `UHID-010565`) are removed wherever else they appear in that file.
+- **File and folder names:** a name that holds an identifier, a phone number, a listed name or one of the file's own detected names is replaced with an opaque name, `doc_<hash>.<ext>` or `dir_<hash>`, derived from a keyed hash and never from the original name. Other names are kept. The new path is recorded in `report.json` against the file's SHA-256.
+- **Table cues:** a name-shaped column beside a column of bare relation markers (`S/o`, `W/o`) holds relatives' names, whatever its header says.
+
 ## The clinical shield
 
 `src/detect/shield.py` marks text that name and address detection must never remove. It covers the ten scored trap groups and the rest of the clinical record:

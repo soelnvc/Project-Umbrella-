@@ -13,7 +13,7 @@ from src.detect import vocab
 from src.detect.patterns import DEVA_LETTERS
 
 SEED_SOURCES = frozenset({"field", "fhir", "label", "relation", "before_relation", "honorific", "timeline",
-                          "attendant", "chat", "possessive", "by_person"})
+                          "attendant", "chat", "possessive", "by_person", "header", "key", "path"})
 NAME_TYPES = frozenset({"PATIENT_NAME", "RELATIVE_NAME"})
 _TOKEN = re.compile(rf"[A-Za-z][A-Za-z'’]*|[{DEVA_LETTERS}]+")
 _DEVA = re.compile(rf"[{DEVA_LETTERS}]")
@@ -64,3 +64,32 @@ def find(text: str, rx, found: dict[str, str]) -> list[Span]:
                           role="relative" if kind == "RELATIVE_NAME" else "patient", action="redact",
                           source="propagation", priority=20))
     return spans
+
+
+_LAST_DIGITS = re.compile(r"(\d{5,})\D*$")
+
+
+def id_cores(views: dict, spans_by_field: dict, resolve) -> set[str]:
+    """The last digit group of each record number found in the file ("010565" in UHID-010565)."""
+    cores: set[str] = set()
+    for address, spans in spans_by_field.items():
+        text = views.get(address)
+        if text is None:
+            continue
+        for span in resolve(spans, text):
+            if span.type == "MRN":
+                m = _LAST_DIGITS.search(text[span.start:span.end])
+                if m and (m.group(1).startswith("0") or len(m.group(1)) >= 6):
+                    cores.add(m.group(1))
+    return cores
+
+
+def core_matcher(cores: set[str]):
+    if not cores:
+        return None
+    return re.compile(r"(?<!\d)(?:" + "|".join(sorted(cores, key=len, reverse=True)) + r")(?!\d)")
+
+
+def find_cores(text: str, rx) -> list[Span]:
+    return [Span(view=-1, start=m.start(), end=m.end(), type="MRN", role="patient", action="token",
+                 source="propagation", priority=21) for m in rx.finditer(text)]

@@ -138,7 +138,7 @@ def find_labelled_names(text: str) -> list[Span]:
         cuts = list(_LABEL_BOUNDARY.finditer(head))
         label = head[cuts[-1].end():] if cuts else head
         label = label.strip()
-        if not label or len(vocab.words(label)) > 4:
+        if not label or len(vocab.words(label)) > 6:
             continue
         kind = label_kind(label)
         if kind is None:

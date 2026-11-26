@@ -39,9 +39,10 @@ class Span:
     end: int                        # offsets in the original text
     type: str                       # PATIENT_NAME, RELATIVE_NAME, PHONE, AADHAAR, MRN, DOB, AGE, DATE, ...
     role: str                       # patient | relative | other | protected
-    action: str                     # redact | pseudonym | token | generalize | shift | keep
+    action: str                     # redact | pseudonym | token | generalize | shift | keep | replace
     source: str
     priority: int = 0
+    replacement: str | None = None  # the exact new text, when action is "replace"
 
 
 @dataclass

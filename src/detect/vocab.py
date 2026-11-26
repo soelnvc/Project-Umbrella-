@@ -21,7 +21,7 @@ RELATIVE_TOKENS = frozenset({"pita", "pati", "kin", "nok", "son", "daughter", "w
 DOCTOR_STEMS = ("doctor", "consultant", "physician", "surgeon", "referred", "referring", "attending",
                 "treating", "practitioner", "डॉक्टर", "चिकित्सक", "author", "performer")
 DOCTOR_TOKENS = frozenset({"dr", "ref", "डॉ", "by"})
-NONPERSON_STEMS = ("test", "drug", "hospital", "report", "panel", "department", "procedure", "package",
+NONPERSON_STEMS = ("test", "drug", "hospital", "panel", "department", "procedure", "package",
                    "diagnos", "medicine", "medication", "sample", "batch", "company", "insurer",
                    "scheme", "facility", "village", "basti", "ग्राम", "गाँव", "गांव", "district", "tehsil",
                    "taluka", "country", "mohalla", "address", "street", "locality", "पता", "niwas",
@@ -29,7 +29,7 @@ NONPERSON_STEMS = ("test", "drug", "hospital", "report", "panel", "department", 
                    "export", "region", "location", "relation", "rishta", "gender", "complaint", "history",
                    "remark", "note", "comment", "advice", "vital", "result", "frequency", "duration",
                    "strength", "dose", "specialty", "speciality")
-NONPERSON_TOKENS = frozenset({"bed", "lab", "ward", "file", "form", "pin", "zip", "unit", "city", "town",
+NONPERSON_TOKENS = frozenset({"bed", "report", "reports", "lab", "ward", "file", "form", "pin", "zip", "unit", "city", "town",
                               "state", "type", "mode", "level", "gali", "pata", "gram", "gaon", "block",
                               "jila", "zila", "dept", "brand", "generic", "sex", "age", "dob", "date",
                               "time", "year", "ling", "umr", "umar", "aayu", "लिंग", "आयु", "उम्र"})

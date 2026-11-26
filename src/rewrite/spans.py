@@ -65,7 +65,7 @@ def _shielded(span: Span, protected: list[Span], text: str | None) -> Span | Non
         if not any(ch.isalpha() for ch in text[span.start:end]):
             return None
     return Span(view=span.view, start=span.start, end=end, type=span.type, role=span.role,
-                action=span.action, source=span.source, priority=span.priority)
+                action=span.action, source=span.source, priority=span.priority, replacement=span.replacement)
 
 
 def resolve(spans: list[Span], text: str | None = None) -> list[Span]:
@@ -106,6 +106,8 @@ def generalize(kind: str, original: str) -> str:
 
 
 def replacement(span: Span, original: str, keys: Keys) -> str:
+    if span.action == "replace" and span.replacement is not None:
+        return span.replacement
     if span.action == "token":
         return keyed_token(keys, span.type, original)
     if span.action == "generalize":

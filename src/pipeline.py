@@ -12,7 +12,7 @@ from src.core import safety
 from src.core.ledger import Ledger
 from src.core.policy import load_policy
 from src.core.secret import MissingSecret, load_keys
-from src.detect import engine
+from src.detect import channels, engine
 from src.ingest.parsers import ParsedFile, parse
 from src.ingest.walker import walk
 from src.rewrite.apply import apply
@@ -29,10 +29,23 @@ def _peak_rss_mb() -> float:
         return 0.0
 
 
-def _read(in_rel: str, raw: bytes) -> ParsedFile:
+def _read(in_rel: str, raw: bytes, keys) -> ParsedFile:
     parsed = parse(in_rel, raw)
-    engine.detect(parsed)
+    engine.detect(parsed, keys)
     return parsed
+
+
+def _unique(path: str, used: set[str]) -> str:
+    """A deterministic suffix when two files would get the same output path."""
+    if path not in used:
+        return path
+    stem, dot, ext = path.rpartition(".")
+    if not dot or "/" in ext:
+        stem, dot, ext = path, "", ""
+    n = 2
+    while f"{stem}_{n}{dot}{ext}" in used:
+        n += 1
+    return f"{stem}_{n}{dot}{ext}"
 
 
 def _build(parsed: ParsedFile, keys) -> bytes:
@@ -54,6 +67,7 @@ def run(inp: Path, out: Path) -> int:
     ledger = Ledger()
     parsed_files: dict[int, ParsedFile] = {}
     staged: dict[int, bytes] = {}
+    used_paths: set[str] = set()
 
     # Pass 1: ingest. Files are only read here; nothing is written yet.
     for in_rel, path in walk(inp):
@@ -62,14 +76,19 @@ def run(inp: Path, out: Path) -> int:
         if watchdog.expired():
             ledger.quarantine(entry, "time_budget")
             continue
-        ok, parsed = safety.guarded(ledger, entry, _read, in_rel, raw)
+        ok, parsed = safety.guarded(ledger, entry, _read, in_rel, raw, keys)
         if not ok:
             continue
         for record in parsed.records:
             record.file_id = entry.file_id
         entry.fmt = parsed.fmt
         entry.records_count = len(parsed.records)
-        entry.out_rel = in_rel
+        ok, out_rel = safety.guarded(ledger, entry, channels.renamed_path, in_rel, entry.sha256, keys,
+                                     parsed.name_matcher)
+        if not ok:
+            continue
+        entry.out_rel = _unique(out_rel, used_paths)
+        used_paths.add(entry.out_rel)
         parsed_files[entry.file_id] = parsed
         ledger.advance(entry, "parsed")
 

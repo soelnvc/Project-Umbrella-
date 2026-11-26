@@ -438,9 +438,9 @@ def _mutate_base64(text: str, rep: Replacer) -> str:
 
 
 def _labels(text: str, label_map: dict[str, str]) -> str:
-    for old in sorted(label_map, key=len, reverse=True):
-        text = re.sub(rf"(?m)(^|(?<=\s)){re.escape(old)}", lambda m: m.group(1) + label_map[old], text)
-    return text
+    """Rename labels at the start of a line only, so one label never lands inside another."""
+    alternation = "|".join(re.escape(k) for k in sorted(label_map, key=len, reverse=True))
+    return re.sub(rf"(?m)^(\s*)({alternation})", lambda m: m.group(1) + label_map[m.group(2)], text)
 
 
 class FileResult:

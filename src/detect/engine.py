@@ -3,14 +3,17 @@
 Fields are addressed as:
     ("cell", row, col)     a CSV/TSV cell        ("header", col)   a CSV/TSV header cell
     ("json", path)         a JSON string leaf    ("text",)         a whole text document
+    ("jsonkey", parent_path, key)                a JSON object key
 Nothing is changed here; src/rewrite/apply.py applies the spans when the file is built.
 """
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
 
 from src.core.models import Span
-from src.detect import address, names, patterns, profiler, propagate, shield, vocab
+from src.core.secret import Keys
+from src.detect import address, channels, encoded, names, normalize, patterns, profiler, propagate, shield, vocab
 from src.ingest.parsers import ParsedFile
 
 P_FIELD = 60          # a whole field classified by the profiler or a FHIR rule
@@ -76,8 +79,12 @@ def _text_spans(value: str, ftype: str) -> list[Span]:
 
 
 def free_text_spans(value: str) -> list[Span]:
-    return (patterns.find_all(value) + names.find_contextual_names(value) + address.find_address(value)
-            + shield.find_protected(value))
+    """All free-text detectors, run on the normalised view and mapped back to the original."""
+    view = normalize.View(value)
+    text = view.text
+    spans = (patterns.find_all(text) + names.find_contextual_names(text) + address.find_address(text)
+             + channels.path_spans(text) + shield.find_protected(text))
+    return view.to_original(spans)
 
 
 # --------------------------------------------------------------------------- tables
@@ -92,17 +99,44 @@ def _shifted_type(cell: str, types: list[str], col: int) -> str:
     return profiler.UNKNOWN
 
 
+_BARE_MARKER = re.compile(r"^\s*(?:[SDWFM]\s*/\s*[Oo]|C\s*/\s*O|पुत्र|पुत्री|पत्नी|पति)\.?\s*$", re.IGNORECASE)
+_ID_THEN_NAME = re.compile(rf"(?:^|\s)[A-Z][A-Za-z]{{0,5}}[-/_]?\d[\d\-/]{{3,}}\s+(?P<name>(?:[A-Z][a-z]+|[{patterns.DEVA_LETTERS}]+)"
+                           rf"(?:\s+(?:[A-Z][a-z]+|[{patterns.DEVA_LETTERS}]+))?)")
+
+
+def _names_after_ids(head: str) -> list[Span]:
+    """Header cells such as "JJH-0077112 Zainab": a name right after a record number."""
+    return [Span(view=-1, start=m.start("name"), end=m.end("name"), type="PATIENT_NAME", role="patient",
+                 action="redact", source="header", priority=28) for m in _ID_THEN_NAME.finditer(head)]
+
+
+def _relatives_next_to_markers(parsed: ParsedFile, types: list[str]) -> None:
+    """A name-shaped column beside a column of bare relation markers (S/o, W/o) holds relatives."""
+    width = len(types)
+    columns = [[row[c] for row in parsed.rows if c < len(row) and row[c].strip()] for c in range(width)]
+    markers = [bool(col) and sum(bool(_BARE_MARKER.match(v)) for v in col) >= 0.8 * len(col) for col in columns]
+    for c in range(width):
+        if types[c] != profiler.UNKNOWN or not columns[c]:
+            continue
+        if not ((c > 0 and markers[c - 1]) or (c + 1 < width and markers[c + 1])):
+            continue
+        if sum(patterns.name_shaped(v) for v in columns[c]) >= 0.7 * len(columns[c]):
+            types[c] = profiler.RELATIVE
+
+
 def _detect_table(parsed: ParsedFile) -> dict:
     width = len(parsed.header)
     types = []
     for c in range(width):
         values = [row[c] for i, row in enumerate(parsed.rows) if c < len(row) and i not in parsed.shifted_rows]
         types.append(profiler.classify(values, parsed.header[c]))
+    _relatives_next_to_markers(parsed, types)
     parsed.field_types = {f"col:{c}": t for c, t in enumerate(types)}
     views = {}
     for c, head in enumerate(parsed.header):
         views[("header", c)] = head
-        spans = patterns.find_identifiers(head)
+        spans = (patterns.find_identifiers(head) + channels.listed_names(head, "header")
+                 + _names_after_ids(head))
         if spans:
             parsed.spans[("header", c)] = spans
     for i, row in enumerate(parsed.rows):
@@ -195,7 +229,42 @@ def _detect_json(parsed: ParsedFile) -> dict:
             if not spans and kind in ("AADHAAR", "ABHA_NUMBER", "PHONE"):
                 spans = field_spans(text, kind)
         _mark_leaf(parsed, path, value, spans)
+    _detect_keys(parsed, views)
     return views
+
+
+def iter_keys(data):
+    """(parent_path, key) for every object key, without recursion."""
+    stack = [((), data)]
+    while stack:
+        path, node = stack.pop()
+        if isinstance(node, dict):
+            for key, value in node.items():
+                yield path, key
+                if isinstance(value, (dict, list)):
+                    stack.append((path + (key,), value))
+        elif isinstance(node, list):
+            for idx, value in enumerate(node):
+                if isinstance(value, (dict, list)):
+                    stack.append((path + (idx,), value))
+
+
+def _detect_keys(parsed: ParsedFile, views: dict) -> None:
+    """Object keys that are personal data ("by_name": {"Zainab Siddiqui": ...})."""
+    for parent_path, key in iter_keys(parsed.data):
+        if not isinstance(key, str) or not key.strip():
+            continue
+        views[("jsonkey", parent_path, key)] = key
+        kind = patterns.full_match_type(key)
+        spans: list[Span] = []
+        if kind in ID_TYPES:
+            spans = field_spans(key, kind, "key")
+        elif patterns.name_shaped(key) and " " in key.strip():
+            parent = next((p for p in reversed(parent_path) if isinstance(p, str)), "")
+            if vocab.has(parent, vocab.NAME_STEMS, vocab.NAME_TOKENS) or channels.listed_names(key, "key"):
+                spans = field_spans(key, profiler.NAME, "key")
+        if spans:
+            parsed.spans[("jsonkey", parent_path, key)] = spans
 
 
 def _resource_type(data, path: tuple) -> tuple[str | None, int]:
@@ -272,7 +341,7 @@ def _detect_fhir(parsed: ParsedFile) -> dict:
 
 
 # --------------------------------------------------------------------------- entry point
-def detect(parsed: ParsedFile) -> None:
+def detect(parsed: ParsedFile, keys: Keys | None = None) -> None:
     parsed.spans = {}
     parsed.field_types = {}
     if parsed.fmt in ("csv", "tsv"):
@@ -286,23 +355,61 @@ def detect(parsed: ParsedFile) -> None:
         spans = free_text_spans(parsed.text)
         if spans:
             parsed.spans[("text",)] = spans
-    _spread_names(parsed, views)
+    found, rx = _spread_names(parsed, views)
+    parsed.name_matcher = rx
+    if keys is not None:
+        _clean_encoded(parsed, views, found, rx, keys)
 
 
-def _spread_names(parsed: ParsedFile, views: dict) -> None:
-    """Same-file name spreading (plan decision: names never cross files)."""
+def _add(parsed: ParsedFile, address_key, text: str, extra: list[Span]) -> None:
+    if not extra:
+        return
+    if address_key not in parsed.spans:
+        parsed.spans[address_key] = shield.find_protected(text)
+    parsed.spans[address_key].extend(extra)
+
+
+def _spread_names(parsed: ParsedFile, views: dict):
+    """Same-file spreading of names and record-number digits (names never cross files)."""
     from src.rewrite.spans import resolve
     found = propagate.seeds(views, parsed.spans, resolve)
+    cores = propagate.id_cores(views, parsed.spans, resolve)
     rx = propagate.matcher(found)
-    if rx is None:
-        return
+    core_rx = propagate.core_matcher(cores)
+    if rx is None and core_rx is None:
+        return found, rx
     for address_key, text in views.items():
-        extra = propagate.find(text, rx, found)
-        if not extra:
+        view = normalize.View(text)
+        extra = []
+        if rx is not None:
+            extra += propagate.find(view.text, rx, found)
+        if core_rx is not None:
+            extra += propagate.find_cores(view.text, core_rx)
+        _add(parsed, address_key, text, view.to_original(extra))
+    return found, rx
+
+
+def clean_text_with(found: dict, rx, keys: Keys):
+    from src.rewrite.spans import apply_text
+
+    def clean(text: str) -> str:
+        view = normalize.View(text)
+        extra = view.to_original(propagate.find(view.text, rx, found)) if rx is not None else []
+        return apply_text(text, free_text_spans(text) + extra, keys)
+    return clean
+
+
+_MAYBE_ENCODED = re.compile(r"[A-Za-z0-9+/]{16,}|[0-9A-Fa-f]{24,}")
+
+
+def _clean_encoded(parsed: ParsedFile, views: dict, found: dict, rx, keys: Keys) -> None:
+    """Decode, clean and re-encode base64 and hex payloads, using this file's names too."""
+    clean = clean_text_with(found, rx, keys)
+    for address_key, text in views.items():
+        if not _MAYBE_ENCODED.search(text):
             continue
-        if address_key not in parsed.spans:
-            parsed.spans[address_key] = shield.find_protected(text)
-        parsed.spans[address_key].extend(extra)
+        whole = address_key[0] == "json" and bool(address_key[1]) and address_key[1][-1] == "data"
+        _add(parsed, address_key, text, encoded.find_encoded(text, clean, whole_value=whole))
 
 
 def entity_counts(parsed: ParsedFile, resolve) -> Counter:
