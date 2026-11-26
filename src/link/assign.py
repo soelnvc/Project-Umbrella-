@@ -6,24 +6,34 @@ from src.link import clues, cluster, pseudonym
 from src.rewrite.spans import resolve
 
 
+def _set_replacement(raw_spans: list, span, replacement: str) -> None:
+    span.action, span.replacement = "replace", replacement
+    if span not in raw_spans:
+        span.priority = max(span.priority + 1, 65)
+        raw_spans.append(span)
+
+
 def _place(parsed, loc: str, psn: str) -> bool:
     """Put the pseudonym in the patient's record number; failing that, in the patient's name."""
     placed = False
     fields = clues.record_fields(parsed, loc)
     for address, hint, text in fields:
-        for span in resolve(parsed.spans.get(address, []), text):
+        raw_spans = parsed.spans.get(address, [])
+        for span in resolve(raw_spans, text):
             if span.type != "MRN" or span.source in ("propagation", "path"):
                 continue
             label = text[max(0, span.start - 25):span.start]
-            if clues._is_patient_id_hint(hint) or clues._is_patient_id_hint(label):
-                span.action, span.replacement = "replace", psn
+            if (clues._is_patient_id_hint(hint) or clues._is_patient_id_hint(label)
+                    or (clues._patient_resource(parsed, address) and "identifier" in hint)):
+                _set_replacement(raw_spans, span, psn)
                 placed = True
     if placed:
         return True
     for address, _, text in fields:
-        for span in resolve(parsed.spans.get(address, []), text):
+        raw_spans = parsed.spans.get(address, [])
+        for span in resolve(raw_spans, text):
             if span.type == "PATIENT_NAME":
-                span.action, span.replacement = "replace", psn
+                _set_replacement(raw_spans, span, psn)
                 placed = True
     return placed
 
@@ -52,9 +62,12 @@ def link_files(files: list[tuple[int, str, object]], keys: Keys) -> tuple[dict[s
     for (parsed, record), group in zip(owners, groups):
         if group is None:
             continue
-        record.cluster_id = group
-        record.pseudonym = names[group]
-        linked += 1
-        placed += _place(parsed, record.loc, record.pseudonym)
+        if _place(parsed, record.loc, names[group]):
+            record.cluster_id = group
+            record.pseudonym = names[group]
+            linked += 1
+            placed += 1
+        else:
+            record.pseudonym = None
     summary = {"records": len(records), "with_patient": linked, "placed": placed, "patients": len(names)}
     return summary, {(rc.file_id, rc.loc): rc for rc in records}

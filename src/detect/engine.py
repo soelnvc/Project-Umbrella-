@@ -25,6 +25,8 @@ _FHIR_SKIP_KEYS = frozenset({"system", "code", "reference", "fullUrl", "url", "i
 _FHIR_PERSON = ("Patient", "RelatedPerson", "Person")
 _FHIR_STAFF = ("Practitioner", "PractitionerRole", "Organization", "Location", "HealthcareService")
 _SUBJECT_KEYS = frozenset({"subject", "patient", "beneficiary", "for", "individual"})
+_STAFF_REF_KEYS = frozenset({"author", "performer", "requester", "recorder", "asserter", "participant",
+                             "attester", "custodian"})
 
 
 def _whole(value: str, kind: str, role: str, source: str) -> Span | None:
@@ -322,11 +324,24 @@ def _detect_fhir(parsed: ParsedFile) -> dict:
             spans = field_spans(text, profiler.RELATIVE if relative else profiler.NAME, "fhir")
         elif last == "display" and parent in _SUBJECT_KEYS:
             spans = field_spans(text, profiler.NAME, "fhir")
+        elif last == "display" and parent in _STAFF_REF_KEYS:
+            spans = patterns.find_identifiers(text)
+            if text.strip():
+                spans.append(Span(view=-1, start=0, end=len(text), type="PROTECTED", role="protected",
+                                  action="keep", source="doctor", priority=100))
         elif rtype in _FHIR_PERSON and "name" in inner:
             relative = rtype == "RelatedPerson" or "contact" in inner
             spans = field_spans(text, profiler.RELATIVE if relative else profiler.NAME, "fhir")
         elif rtype in _FHIR_PERSON and "address" in inner and last in ("city", "village"):
             spans = [] if profiler._district(text) else field_spans(text, profiler.VILLAGE, "fhir")
+        elif rtype in _FHIR_PERSON and "address" in inner and "line" in inner and isinstance(last, int):
+            spans = free_text_spans(text)
+            has_addr = any(s.type in ("HOUSE", "LOCALITY", "LANDMARK", "VILLAGE", "ADDRESS") for s in spans)
+            if (not has_addr and not profiler._district(text)
+                    and not re.match(r"(?i)^\s*(?:tehsil|teh\.?|distt?\.?|district)\b", text)):
+                whole = _whole(text, "ADDRESS", "patient", "fhir")
+                if whole:
+                    spans.append(whole)
         elif rtype in _FHIR_PERSON and "address" in inner and last == "postalCode":
             spans = field_spans(text, profiler.PIN, "fhir")
         elif rtype in _FHIR_PERSON and "address" in inner and last in _FHIR_ADDRESS_KEEP:
@@ -337,6 +352,9 @@ def _detect_fhir(parsed: ParsedFile) -> dict:
             spans = field_spans(text, patterns.full_match_type(text) or "MRN", "fhir")
         elif rtype in _FHIR_STAFF and "name" in inner:
             spans = patterns.find_identifiers(text)
+            if text.strip():
+                spans.append(Span(view=-1, start=0, end=len(text), type="PROTECTED", role="protected",
+                                  action="keep", source="doctor", priority=100))
         elif isinstance(value, str):
             spans = free_text_spans(text)
         _mark_leaf(parsed, path, value, spans)

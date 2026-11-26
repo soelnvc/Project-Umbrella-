@@ -156,11 +156,24 @@ def _patient_level(obj: dict) -> bool:
     return any(_patient_key(k) for k, v in obj.items() if not _is_record_list(v))
 
 
+def _collect_record_locs(node: dict, prefix: str, depth_left: int) -> list[str]:
+    locs: list[str] = []
+    for key, value in node.items():
+        token = jsontree.pointer_token(key)
+        path = f"{prefix}/{token}"
+        if _is_record_list(value) and any(_patient_level(x) for x in value):
+            locs.extend(f"{path}/{i}" for i in range(len(value)))
+        elif depth_left > 0 and isinstance(value, dict) and "resourceType" not in value and not _patient_level(value):
+            locs.extend(_collect_record_locs(value, path, depth_left - 1))
+    return locs
+
+
 def json_records(data) -> list[Record]:
     """Split a JSON file into records.
 
-    A file whose top level describes one patient is one document. Otherwise each top-level
-    list of objects whose items carry patient-level keys gives one record per item.
+    A file whose top level describes one patient is one document. Otherwise each list of objects
+    (at top level or inside wrapper objects) whose items carry patient-level keys gives one record
+    per item.
     """
     doc = [Record(file_id=-1, loc="doc", kind="doc")]
     if isinstance(data, list):
@@ -169,11 +182,7 @@ def json_records(data) -> list[Record]:
         return doc
     if not isinstance(data, dict) or "resourceType" in data or _patient_level(data):
         return doc
-    locs = []
-    for key, value in data.items():
-        if _is_record_list(value) and any(_patient_level(x) for x in value):
-            token = jsontree.pointer_token(key)
-            locs.extend(f"/{token}/{i}" for i in range(len(value)))
+    locs = _collect_record_locs(data, "", 2)
     return [Record(file_id=-1, loc=loc, kind="json") for loc in locs] or doc
 
 
@@ -186,6 +195,27 @@ def _parse_json(text: str, parsed: ParsedFile) -> None:
     parsed.pretty = "\n" in text.strip()
     parsed.fmt = "fhir" if isinstance(data, dict) and data.get("resourceType") else "json"
     parsed.records = json_records(data)
+
+
+def _looks_strict_table_in_text(text: str, delimiter: str) -> bool:
+    """True when a .txt file is unmistakably a clean table rather than prose."""
+    lines = [ln for ln in text.splitlines()[:30] if ln.strip()]
+    if len(lines) < 2 or ":" in lines[0]:
+        return False
+    try:
+        rows = [r for r in csv.reader(io.StringIO("\n".join(lines), newline=""), delimiter=delimiter) if r]
+    except csv.Error:
+        return False
+    min_cols = 2 if delimiter == "\t" else 3
+    if len(rows) < 2 or len(rows[0]) < min_cols:
+        return False
+    width = len(rows[0])
+    if not all(len(r) == width for r in rows[1:]):
+        return False
+    if not all(1 <= len(h.strip()) <= 40 and not h.strip().endswith(".") for h in rows[0]):
+        return False
+    from src.detect import vocab
+    return any(vocab.any_hint(h) for h in rows[0])
 
 
 # --------------------------------------------------------------------------- entry point
@@ -218,9 +248,9 @@ def parse(in_rel: str, raw: bytes) -> ParsedFile:
         _parse_table(text, delimiter, "tsv" if delimiter == "\t" else "csv", parsed)
         return parsed
 
-    if ext not in ("txt", "text", "md", "log", "note"):
-        delimiter = choose_delimiter(text, None)
-        if delimiter is not None:
+    delimiter = choose_delimiter(text, None)
+    if delimiter is not None:
+        if ext not in ("txt", "text", "md", "log", "note") or _looks_strict_table_in_text(text, delimiter):
             _parse_table(text, delimiter, "tsv" if delimiter == "\t" else "csv", parsed)
             return parsed
 

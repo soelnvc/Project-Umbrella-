@@ -53,7 +53,41 @@ def test_withheld_fhir_birth_date_uses_the_standard_marker(tmp_path, monkeypatch
     released = next(p for p in (out / "sanitized").rglob("*.json"))
     patient = json.loads(released.read_text())["entry"][0]["resource"]
     assert "birthDate" not in patient and patient["_birthDate"]["extension"][0]["valueCode"] == "masked"
+    assert patient["identifier"][0]["value"].startswith("PSN-")
     assert fhir_check.problems(json.loads(released.read_text())) == []
+
+
+def test_standalone_fhir_resource_and_practitioner_protection(tmp_path, monkeypatch):
+    monkeypatch.setenv("RAKSHA_SECRET", "s")
+    inp = tmp_path / "in"
+    (inp / "fhir").mkdir(parents=True)
+    standalone = {"resourceType": "Patient", "id": "p1", "name": [{"text": "Ramesh Kumar"}],
+                  "birthDate": "1977", "address": [{"line": ["B-42, Shastri Nagar"], "postalCode": "226001"}]}
+    bundle = {
+        "resourceType": "Bundle", "type": "collection",
+        "entry": [
+            {"fullUrl": "urn:uuid:p1", "resource": {
+                "resourceType": "Patient", "id": "p1", "name": [{"text": "Ramesh Kumar"}],
+                "identifier": [{"system": "http://h.in/uhid", "value": "SNJ/26/064127"}],
+                "managingOrganization": {"reference": "Organization/ext-1"},
+            }},
+            {"fullUrl": "urn:uuid:pr1", "resource": {
+                "resourceType": "Practitioner", "id": "pr1",
+                "name": [{"given": ["Ramesh"], "family": "Srivastava"}],
+            }},
+        ],
+    }
+    (inp / "fhir" / "p.json").write_text(json.dumps(standalone))
+    (inp / "fhir" / "b.json").write_text(json.dumps(bundle))
+    out = tmp_path / "out"
+    assert pipeline.run(inp, out) == 0
+    p_out = json.loads((out / "sanitized/fhir/p.json").read_text())
+    assert "birthDate" not in p_out and p_out["_birthDate"]["extension"][0]["valueCode"] == "masked"
+    assert "Shastri" not in json.dumps(p_out) and p_out["address"][0]["postalCode"] == "226***"
+    b_out = json.loads((out / "sanitized/fhir/b.json").read_text())
+    pat, prac = b_out["entry"][0]["resource"], b_out["entry"][1]["resource"]
+    assert pat["identifier"][0]["value"].startswith("PSN-")
+    assert prac["name"][0]["given"] == ["Ramesh"]
 
 
 def test_leak_finder_reads_like_the_organizers():

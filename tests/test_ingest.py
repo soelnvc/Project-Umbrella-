@@ -132,6 +132,15 @@ def test_top_level_list_of_patient_objects():
     assert [r.loc for r in parse("x.json", raw.encode()).records] == ["/0", "/1"]
 
 
+def test_nested_wrapper_json_and_csv_behind_txt():
+    nested = json.dumps({"hospital": "X", "payload": {"patients": [{"uhid": "A-1"}, {"uhid": "A-2"}]}})
+    assert [r.loc for r in parse("export.json", nested.encode()).records] == ["/payload/patients/0",
+                                                                               "/payload/patients/1"]
+    csv_txt = b"UHID,Patient Name,Mobile\nSNJ/26/000001,Vrekon Talmir,9876543210\nSNJ/26/000002,Kreno Bisk,9876543211\n"
+    p = parse("patients.txt", csv_txt)
+    assert p.fmt == "csv" and [r.loc for r in p.records] == ["row:0", "row:1"]
+
+
 # --------------------------------------------------------------------------- tables
 def test_tsv_and_multiline_cells():
     raw = 'ID\tNotes\n1\t"line one\nline two"\n2\tok\n'.encode()

@@ -150,3 +150,18 @@ def test_pseudonym_is_written_inside_each_record(tmp_path, monkeypatch):
     for r in records:
         assert psn in (out / r["file"]).read_text()
     assert (out / "sanitized/registration/r.csv").read_text().splitlines()[1].startswith(psn + ",[NAME],M")
+
+
+def test_pseudonym_survives_trimmed_name_span_and_never_claims_unplaced(tmp_path, monkeypatch):
+    monkeypatch.setenv("RAKSHA_SECRET", "s")
+    inp = tmp_path / "in"
+    inp.mkdir()
+    (inp / "n.txt").write_text("Name: Ravi Kumar Paracetamol 650 mg\nDOB: 12/04/1977\n")
+    (inp / "rel_only.txt").write_text("S/o Mohan Lal\nBP 120/80\n")
+    out = tmp_path / "out"
+    assert pipeline.run(inp, out) == 0
+    recs = {r["file"]: r["patient"] for r in (json.loads(l) for l in (out / "records.jsonl").read_text().splitlines())}
+    psn = recs["sanitized/n.txt"]
+    assert psn and psn.startswith("PSN-")
+    assert f"Name: {psn} Paracetamol 650 mg" in (out / "sanitized/n.txt").read_text()
+    assert recs["sanitized/rel_only.txt"] is None

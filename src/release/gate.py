@@ -48,6 +48,8 @@ def _with_decoded(text: str) -> str:
 # --------------------------------------------------------------------------- shape
 def shape(parsed: ParsedFile) -> list:
     """A signature of the file's structure, taken before the file is rewritten."""
+    if parsed.fmt == "fhir":
+        parsed._ext_refs = fhir_check.unresolved_refs(parsed.data)
     if parsed.fmt in ("csv", "tsv"):
         return [len(parsed.header)] + [len(r) for r in parsed.rows]
     if parsed.fmt in ("json", "fhir"):
@@ -98,7 +100,7 @@ def check_format(parsed: ParsedFile, before: list, data: bytes) -> bool:
         out = ParsedFile(fmt=parsed.fmt, encoding="utf-8", bom=False, data=data_out)
         if not _shape_matches(before, shape(out)):
             return False
-        return not (parsed.fmt == "fhir" and fhir_check.problems(data_out))
+        return not (parsed.fmt == "fhir" and fhir_check.problems(data_out, getattr(parsed, "_ext_refs", frozenset())))
     return text.count("\n") == before[0]
 
 

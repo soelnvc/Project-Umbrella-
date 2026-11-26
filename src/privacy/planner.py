@@ -356,11 +356,17 @@ def _apply(parsed, per_field, prof: Profile, band: str | None, chapters_on: bool
                 for m in rx.finditer(low):
                     spans.append(_replace(m.start(), m.end(), ch[1] if ch else WITHHELD))
                     changed = True
-        for span in resolve(spans, text):
+        for span in list(resolve(spans, text)):
             if span.type == "VILLAGE" and address[0] != "text" and span.source in ("field", "fhir"):
                 span.action, span.replacement = "replace", place or "[VILLAGE]"
+                if span not in spans:
+                    span.priority = max(span.priority + 1, 65)
+                    spans.append(span)
             elif span.type == "PIN" and GEO_LEVELS[prof.geo_level] == "withheld":
                 span.action, span.replacement = "replace", "[PIN]"
+                if span not in spans:
+                    span.priority = max(span.priority + 1, 65)
+                    spans.append(span)
         if not spans:
             del parsed.spans[address]
     return int(changed)

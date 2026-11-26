@@ -5,6 +5,7 @@ band an age or generalise a place without touching anything around it.
 """
 from __future__ import annotations
 
+import datetime as dt
 import re
 from dataclasses import dataclass
 
@@ -80,6 +81,11 @@ def field_mentions(hint: str, text: str, conv: str, fhir_type: str | None = None
     last = hint.split("/")[-1].lower()
     stripped = text.strip()
     lead = len(text) - len(text.lstrip())
+    if last == "birthdate" and re.fullmatch(r"\d{4}(?:-\d{2})?", stripped):
+        yr = int(stripped[:4])
+        mo = int(stripped[5:7]) if len(stripped) >= 7 else 1
+        if 1850 <= yr <= 2100 and 1 <= mo <= 12:
+            out.append(Mention(lead, lead + len(stripped), "date", dt.date(yr, mo, 1), "dob"))
     if _age_hint(hint):
         m = _AGE_ONLY_VALUE.match(text) if last == "years" else re.match(r"\s*(\d{1,3})(?!\d)", text)
         if m and not _AGE_SEX.match(text):
