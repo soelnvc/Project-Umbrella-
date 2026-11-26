@@ -50,7 +50,8 @@ A single file ledger tracks every input file from start to finish, so no file is
 |---|---|
 | `main.py` | entry point |
 | `src/pipeline.py` | runs the passes |
-| `src/core/` | shared data shapes, file ledger, secret handling, policy reader |
+| `src/core/` | shared data shapes, file ledger, secret handling, policy reader, safety shell |
+| `tests/` | automated tests (`pip install -r requirements-dev.txt`, then `python3 -m pytest`) |
 | `src/baseline.py` | temporary processing from the organizers' starter, replaced stage by stage |
 | `config/policy.yaml` | privacy settings |
 | `raksha.toml` | how the organizers set up and run the submission |
@@ -58,7 +59,9 @@ A single file ledger tracks every input file from start to finish, so no file is
 ## Security
 
 - `RAKSHA_SECRET` stays in memory. Separate subkeys are derived for fake IDs, date shifts, ID tokens and encryption.
-- Output messages contain counts only. Errors are reported by exception class name only.
+- Output messages contain an event code and numbers only; the logger drops any text value. Errors are reported by exception class name only, and Python warnings are silenced.
+- Each file is processed inside its own error boundary: a failure sets that file aside with the reason `processing_error`, and the run continues.
+- A time watchdog sets aside any file not started before the time budget (`time_budget_seconds` in the policy, 720 by default), so the run always finishes with a complete, honest report.
 - The input folder is only read. Nothing is written to temporary folders or the home folder.
 
 ## Models

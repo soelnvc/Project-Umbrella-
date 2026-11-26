@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
+from src.core import safety  # noqa: E402
 from src.pipeline import run  # noqa: E402
 
 
@@ -16,9 +17,10 @@ def main() -> int:
     ap.add_argument("--input", required=True)
     ap.add_argument("--output", required=True)
     a = ap.parse_args()
+    safety.install()
     try:
         return run(Path(a.input), Path(a.output))
-    except Exception as exc:  # noqa: BLE001
+    except BaseException as exc:  # noqa: BLE001
         # Exception messages can carry data values, so only the class name is printed.
         print(f"fatal {type(exc).__name__}", file=sys.stderr)
         return 1

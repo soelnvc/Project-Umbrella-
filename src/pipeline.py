@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from src import baseline
+from src.core import safety
 from src.core.ledger import Ledger
 from src.core.policy import load_policy
 from src.core.secret import MissingSecret, load_keys
@@ -38,13 +39,15 @@ def _peak_rss_mb() -> float:
 
 def run(inp: Path, out: Path) -> int:
     t0 = time.monotonic()
+    safety.install()
     try:
         keys = load_keys()
     except MissingSecret:
-        print("error: RAKSHA_SECRET is not set", file=sys.stderr)
+        safety.log("error_secret_missing", stream=sys.stderr)
         return 2
     policy = load_policy()
-    del keys, policy  # used by the linking and privacy passes once they exist
+    watchdog = safety.Watchdog(policy.get("time_budget_seconds", 720))
+    del keys  # used by the linking and privacy passes once they exist
 
     ledger = Ledger()
     staged: dict[int, str] = {}
@@ -54,13 +57,11 @@ def run(inp: Path, out: Path) -> int:
     for in_rel, path in _walk(inp):
         raw = path.read_bytes()
         entry = ledger.discover(in_rel, hashlib.sha256(raw).hexdigest())
-        try:
-            result = baseline.process(in_rel, raw)
-        except baseline.Quarantine as q:
-            ledger.quarantine(entry, q.reason)
+        if watchdog.expired():
+            ledger.quarantine(entry, "time_budget")
             continue
-        except Exception:  # noqa: BLE001
-            ledger.quarantine(entry, "processing_error")
+        ok, result = safety.guarded(ledger, entry, baseline.process, in_rel, raw)
+        if not ok:
             continue
         entry.fmt = result.fmt
         entry.records_count = len(result.locs)
@@ -115,6 +116,7 @@ def run(inp: Path, out: Path) -> int:
     }
     (out / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 
-    print(f"files {counts['files_total']} sanitized {counts['files_sanitized']} "
-          f"quarantined {counts['files_quarantined']} records {counts['records_processed']}")
+    safety.log("done", files=counts["files_total"], sanitized=counts["files_sanitized"],
+               quarantined=counts["files_quarantined"], records=counts["records_processed"],
+               seconds=report["timing"]["seconds"])
     return 0 if consistent else 1

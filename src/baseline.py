@@ -12,6 +12,8 @@ import json
 import re
 from collections import Counter
 
+from src.core.safety import QuarantineSignal as Quarantine
+
 PATTERNS = [
     ("PHONE", re.compile(r"(?<!\d)(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}(?!\d)")),
     ("AADHAAR", re.compile(r"(?<!\d)\d{4}[\s-]?\d{4}[\s-]?\d{4}(?!\d)")),
@@ -21,12 +23,6 @@ PATTERNS = [
 ]
 
 SUPPORTED = {".csv": "csv", ".tsv": "tsv", ".json": "json", ".txt": "text"}
-
-
-class Quarantine(Exception):
-    def __init__(self, reason: str) -> None:
-        super().__init__(reason)
-        self.reason = reason
 
 
 class Result:
