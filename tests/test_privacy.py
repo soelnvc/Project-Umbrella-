@@ -168,3 +168,22 @@ def test_rare_diagnosis_replacement_respects_word_boundaries(tmp_path, monkeypat
     assert pipeline.run(inp, out) == 0
     note = (out / "sanitized/d.txt").read_text()
     assert "massive improvement." in note and "R00-R99" in note
+
+
+def test_rare_threshold_scales_with_cohort_size(tmp_path, monkeypatch):
+    from src.privacy.planner import _effective_rare_max
+    assert _effective_rare_max(3, 50) == 1
+    assert _effective_rare_max(3, 120) == 2
+    assert _effective_rare_max(3, 250) == 3
+
+    # On a small cohort, a condition shared by 2 patients is kept while a unique one is generalised
+    monkeypatch.setenv("RAKSHA_SECRET", "s")
+    inp = tmp_path / "in"
+    inp.mkdir()
+    (inp / "a.txt").write_text("Name: Ravi Kumar\nUHID: SNJ/26/000001\nDiagnosis: Bell's palsy (G51.0)\n")
+    (inp / "b.txt").write_text("Name: Sita Verma\nUHID: SNJ/26/000002\nDiagnosis: Bell's palsy (G51.0)\n")
+    (inp / "c.txt").write_text("Name: Mohan Lal\nUHID: SNJ/26/000003\nDiagnosis: Addison's disease (E27.1)\n")
+    out = tmp_path / "out"
+    assert pipeline.run(inp, out) == 0
+    assert "Bell's palsy (G51.0)" in (out / "sanitized/a.txt").read_text()
+    assert "E00-E90" in (out / "sanitized/c.txt").read_text()

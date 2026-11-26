@@ -98,7 +98,15 @@ def _hint(parsed, address) -> str:
     return ""
 
 
-# --------------------------------------------------------------------------- planning
+def _effective_rare_max(configured: int, n_profiles: int) -> int:
+    """Scale rarity cap with cohort size: 1 on small sets (<=80), 2 up to 160, full cap above 160."""
+    if configured <= 0:
+        return 0
+    if n_profiles <= 80:
+        return min(configured, 1)
+    if n_profiles <= 160:
+        return min(configured, 2)
+    return configured
 def plan(files, record_clues: dict, keys: Keys, policy: dict) -> dict:
     """files: (file_id, sha256, parsed). Adds replacement spans; returns counts."""
     k = int(policy.get("k_anonymity", 5))
@@ -177,7 +185,8 @@ def plan(files, record_clues: dict, keys: Keys, policy: dict) -> dict:
     if not profiles:
         return {"profiles": 0, "records_generalized": 0, "high_risk": 0, "escalated": 0}
 
-    # Rare values, counted over distinct patients.
+    # Rare values, counted over distinct patients (threshold scaled by cohort size).
+    rare_limit = _effective_rare_max(rare_max, len(profiles))
     code_count = Counter(c for p in profiles.values() for c in p.codes)
     proc_count = Counter(x for p in profiles.values() for x in p.procedures)
     stay_count = Counter(s for p in profiles.values() for s in p.stays)
@@ -188,8 +197,8 @@ def plan(files, record_clues: dict, keys: Keys, policy: dict) -> dict:
             for t in sorted(code_texts[code]):
                 text_chapter.setdefault(t, ch)
     for p in profiles.values():
-        p.rare_codes = {c for c in p.codes if code_count[c] <= rare_max}
-        p.rare_procedures = {x for x in p.procedures if proc_count[x] <= rare_max}
+        p.rare_codes = {c for c in p.codes if code_count[c] <= rare_limit}
+        p.rare_procedures = {x for x in p.procedures if proc_count[x] <= rare_limit}
         p.rare_texts = set().union(*(code_texts.get(c, set()) for c in p.rare_codes)) if p.rare_codes else set()
         rare_stay = any(stay_count[s] <= rare_stay_max for s in p.stays)
         extreme = bool(p.ages) and (max(p.ages) >= old or min(p.ages) <= young)
