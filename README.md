@@ -17,7 +17,7 @@ Umbrella ingests chaotic, multi-hospital exports (`CSV`, `TSV`, nested `JSON`, `
 | **Planted canaries leaked** · **Broken / unsupported files copied raw** | **0 / 4** · **0** |
 | **Medical values preserved** (doses, vitals, labs, diagnoses, procedures, stay lengths) | **99.2%** *(4,815 / 4,855)* |
 | **Patient linking** — Precision / Recall / **F0.5** *(wrong merges)* | **1.00 / 0.98 / 1.00** *(0)* |
-| **Unseen-format chaos test** (5 seeds: new names, IDs, prefixes, headers, keys, labels, dates) | **0.0% leaked** · **0 / 8 canaries** |
+| **Unseen-format chaos test** (7 seeds: new names, IDs, prefixes, headers, keys, labels, dates) | **0.0% leaked** · **0 / 8 canaries** |
 | **Pooled attacker re-identification** (`attacker_lite.py`: raw data **98%**) | **23%** |
 | **Record-linkage attack** (raw **92%**) · **Pseudonym inversion / cross-secret stability** | **5%** · **0% / 0%** |
 | **Speed & memory** (`200` files, `815` records) · **Linear scaling exponent** (`16×` load) | **1.4 s / 49 MB** · **0.98–0.99** |
