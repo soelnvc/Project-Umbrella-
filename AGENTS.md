@@ -21,4 +21,4 @@ These apply to every change, by a person or a coding assistant.
 
 ## Before every merge
 - Run the full check (`tools/verify.sh` once it exists): tests, two runs with the same secret must match, a run with a different secret must differ, `validate_output.py` must print `CONTRACT OK`.
-- Commit often. The last commit at the deadline is what gets scored.
+- Commit often. The last commit at the deadline is what gets scored..
