@@ -43,7 +43,7 @@ def test_shifted_date_never_reads_as_a_birth_date_in_the_same_file():
 
 def test_source_convention_decides_ambiguous_files():
     files = [(1, "notes/arogya_nursing_1.txt", ["01/13/2026 22:00"], ""),
-             (2, "discharge/arogya_ds_ADM000162.txt", ["Date of Admission: 02/01/2026"], ""),
+             (2, "discharge/arogya_ds_ADM333590.txt", ["Date of Admission: 02/01/2026"], ""),
              (3, "discharge/other_ds_1.txt", ["Date of Admission: 02/01/2026"], "")]
     conv = dates.conventions(files)
     assert conv == {1: "mdy", 2: "mdy", 3: "dmy"}
@@ -76,9 +76,9 @@ def _run(tmp_path, monkeypatch, secret="s"):
     (inp / "discharge").mkdir(exist_ok=True)
     (inp / "registration" / "r.csv").write_text(
         "UHID,Patient Name,Gender,Age,DOB,Relation,Relative Name,Gaon,Tehsil,District,Reg Date\n"
-        "SNJ/26/064127,Mahesh Chauhan,M,48,12/04/1977,S/o,Naresh Chauhan,Durgamau Kalan,Lalganj,Rae Bareli,30/06/2025\n")
+        "KRP/26/391508,Dinesh Rathore,M,48,12/04/1977,S/o,Mukesh Rathore,Lakhmau Kalan,Lalganj,Rae Bareli,30/06/2025\n")
     (inp / "discharge" / "d.txt").write_text(
-        "Patient Name: Mahesh Chauhan   Age/Sex: 48 Yrs/M\nUHID: SNJ/26/064127\n"
+        "Patient Name: Dinesh Rathore   Age/Sex: 48 Yrs/M\nUHID: KRP/26/391508\n"
         "Date of Admission: 07/02/2026\nDate of Discharge: 19/02/2026\nDiagnosis: Typhoid fever (A01.0)\n")
     out = tmp_path / f"out_{secret}"
     assert pipeline.run(inp, out) == 0
@@ -113,7 +113,7 @@ def test_json_age_number_becomes_a_band(tmp_path, monkeypatch):
     monkeypatch.setenv("RAKSHA_SECRET", "s")
     inp = tmp_path / "in"
     inp.mkdir()
-    (inp / "p.json").write_text(json.dumps({"patients": [{"uhid": "DHH2026-084999", "name": "Sunita Patel",
+    (inp / "p.json").write_text(json.dumps({"patients": [{"uhid": "RGH2026-361777", "name": "Savita Patel",
                                                           "age": 51, "gender": "female"}]}))
     out = tmp_path / "out"
     assert pipeline.run(inp, out) == 0
@@ -146,7 +146,7 @@ def test_clinical_fields_ending_in_age_or_duration_years_are_not_banded(tmp_path
     monkeypatch.setenv("RAKSHA_SECRET", "s")
     inp = tmp_path / "in"
     inp.mkdir()
-    payload = {"patients": [{"uhid": "DHH2026-084999", "name": "Ravi Kumar", "age": 48, "gender": "M",
+    payload = {"patients": [{"uhid": "RGH2026-361777", "name": "Ravi Kumar", "age": 48, "gender": "M",
                              "dosage": "500 mg", "stage": 3, "percentage": 85, "duration": {"years": 5}}]}
     (inp / "p.json").write_text(json.dumps(payload))
     out = tmp_path / "out"
@@ -163,7 +163,7 @@ def test_rare_diagnosis_replacement_respects_word_boundaries(tmp_path, monkeypat
     inp = tmp_path / "in"
     inp.mkdir()
     (inp / "d.txt").write_text(
-        "Patient Name: Ravi Kumar\nUHID: SNJ/26/000001\nDiagnosis: Mass (R22.9)\nNotes: massive improvement.\n")
+        "Patient Name: Ravi Kumar\nUHID: KRP/26/000001\nDiagnosis: Mass (R22.9)\nNotes: massive improvement.\n")
     out = tmp_path / "out"
     assert pipeline.run(inp, out) == 0
     note = (out / "sanitized/d.txt").read_text()
@@ -180,9 +180,9 @@ def test_rare_threshold_scales_with_cohort_size(tmp_path, monkeypatch):
     monkeypatch.setenv("RAKSHA_SECRET", "s")
     inp = tmp_path / "in"
     inp.mkdir()
-    (inp / "a.txt").write_text("Name: Ravi Kumar\nUHID: SNJ/26/000001\nDiagnosis: Bell's palsy (G51.0)\n")
-    (inp / "b.txt").write_text("Name: Sita Verma\nUHID: SNJ/26/000002\nDiagnosis: Bell's palsy (G51.0)\n")
-    (inp / "c.txt").write_text("Name: Mohan Lal\nUHID: SNJ/26/000003\nDiagnosis: Addison's disease (E27.1)\n")
+    (inp / "a.txt").write_text("Name: Ravi Kumar\nUHID: KRP/26/000001\nDiagnosis: Bell's palsy (G51.0)\n")
+    (inp / "b.txt").write_text("Name: Sita Verma\nUHID: KRP/26/000002\nDiagnosis: Bell's palsy (G51.0)\n")
+    (inp / "c.txt").write_text("Name: Mohan Lal\nUHID: KRP/26/000003\nDiagnosis: Addison's disease (E27.1)\n")
     out = tmp_path / "out"
     assert pipeline.run(inp, out) == 0
     assert "Bell's palsy (G51.0)" in (out / "sanitized/a.txt").read_text()

@@ -53,7 +53,7 @@ def test_trap_groups_are_protected(text, piece):
 def test_asha_the_job_is_protected_but_asha_the_name_is_not():
     assert covered("Referred by ASHA worker", "ASHA worker")
     assert covered("Referred by ASHA", "ASHA")
-    assert "ASHA" not in protected_text("Name: ASHA RAJPUT   Age: 48/F")
+    assert "ASHA" not in protected_text("Name: ASHA GUPTA   Age: 48/F")
     assert "Asha" not in protected_text("Asha ji 48 Y / F")
 
 
@@ -64,14 +64,14 @@ def test_a_labelled_name_is_not_dropped_because_it_is_on_a_word_list():
 
 
 def test_care_of_a_person_is_not_protected():
-    assert not any("Naresh" in p for p in protected_text("C/O Naresh Chauhan, H.No. 364"))
+    assert not any("Mukesh" in p for p in protected_text("C/O Mukesh Rathore, H.No. 364"))
     assert shield.complaint_like("Pain Abdomen") and shield.complaint_like("fever")
-    assert not shield.complaint_like("Rakesh Verma")
-    assert shield.complaint_like("Rakesh x 3 days")
+    assert not shield.complaint_like("Rajesh Verma")
+    assert shield.complaint_like("Rajesh x 3 days")
 
 
 def test_ward_in_an_address_is_not_protected():
-    text = "C/O Naresh Chauhan, H.No. 364, Ward 20, Mohalla Raja Bazar"
+    text = "C/O Mukesh Rathore, H.No. 364, Ward 20, Mohalla Naya Bazar"
     assert "Ward 20" not in protected_text(text)
 
 
@@ -129,12 +129,12 @@ def test_shield_does_not_leak_person_clauses_or_cross_newlines():
     cases = [
         ("C/O fever x 3 days, brought by Ramesh Kumar", "C/O fever x 3 days, brought by [RELATIVE]"),
         ("C/O pain abdomen x 6 days, S/o Ram Prasad", "C/O pain abdomen x 6 days, S/o [RELATIVE]"),
-        ("K/C/O HTN, attendant Sunita Devi", "K/C/O HTN, attendant [RELATIVE]"),
+        ("K/C/O HTN, attendant Savita Devi", "K/C/O HTN, attendant [RELATIVE]"),
         ("H/O TB, S/o Mohan Lal", "H/O TB, S/o [RELATIVE]"),
         ("डॉ. शर्मा ने रमेश को देखा", "डॉ. शर्मा ने [NAME] को देखा"),
         ("Consultant: Dr. Verma\nName: Ramesh Kumar", "Consultant: Dr. Verma\nName: [NAME]"),
         ("Name: Ramesh Kumar\nCity Hospital", "Name: [NAME]\nCity Hospital"),
-        ("Patient: Anita Sharma\nApex Labs", "Patient: [NAME]\nApex Labs"),
+        ("Patient: Pooja Sharma\nApex Labs", "Patient: [NAME]\nApex Labs"),
     ]
     for raw, expected in cases:
         out = apply_text(raw, engine.free_text_spans(raw), KEYS)
@@ -145,7 +145,7 @@ def test_shield_does_not_leak_person_clauses_or_cross_newlines():
 
 
 def test_left_overlap_protection_keeps_unprotected_suffix():
-    text = "Dr. Verma, Anita Sharma"
+    text = "Dr. Verma, Pooja Sharma"
     prot = shield.find_protected(text)
     wide = Span(view=-1, start=0, end=len(text), type="PATIENT_NAME", role="patient",
                 action="redact", source="relation", priority=30)

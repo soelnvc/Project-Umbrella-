@@ -22,13 +22,13 @@ def test_utf8_with_bom_is_kept_as_bom():
 
 
 def test_utf16_with_bom():
-    d = decode("Reg No\tNaam\nJJH-1\tकमला\n".encode("utf-16"))
-    assert d.encoding == "utf-16" and "कमला" in d.text
+    d = decode("Reg No\tNaam\nJJH-1\tशांति\n".encode("utf-16"))
+    assert d.encoding == "utf-16" and "शांति" in d.text
 
 
 def test_utf16_without_bom():
-    d = decode("Reg No\tName\nJJH-1\tKamla Devi\n".encode("utf-16-le"))
-    assert d.encoding == "utf-16" and "Kamla" in d.text
+    d = decode("Reg No\tName\nMVH-1\tShanti Devi\n".encode("utf-16-le"))
+    assert d.encoding == "utf-16" and "Shanti" in d.text
 
 
 def test_genuine_cp1252_export_is_accepted():
@@ -43,7 +43,7 @@ def test_corrupt_bytes_in_the_middle_are_refused():
 
 
 def test_mixed_utf8_and_invalid_bytes_are_refused():
-    raw = "नाम: कमला ".encode("utf-8") + b"\x9d\xfe junk\n"
+    raw = "नाम: शांति ".encode("utf-8") + b"\x9d\xfe junk\n"
     assert reason("notes/x.txt", raw) == "invalid_encoding"
 
 
@@ -62,7 +62,7 @@ def test_mostly_control_characters_mean_binary():
 
 def test_normal_rows_are_not_flagged_as_shifted():
     header = ["UHID", "Name", "Sex", "Age", "Phone"]
-    rows = [[f"SNJ/{i}", "Ravi Kumar", "M", str(30 + i), f"900000000{i}"] for i in range(6)]
+    rows = [[f"KRP/{i}", "Ravi Kumar", "M", str(30 + i), f"900000000{i}"] for i in range(6)]
     assert find_shifted_rows(header, rows) == set()
 
 
@@ -166,11 +166,11 @@ def test_unknown_extension_with_table_shape_is_a_table():
 
 def test_shifted_row_is_flagged():
     header = ["UHID", "Name", "Sex", "Age", "Phone"]
-    rows = [["SNJ/1", "Ravi Kumar", "M", "40", "9000000001"],
-            ["SNJ/2", "Sita Devi", "F", "35", "9000000002"],
-            ["SNJ/3", "Asha Rani", "F", "50", "9000000003"],
-            ["SNJ/4", "Gita", "Devi", "F", "62"],
-            ["SNJ/5", "Mohan Lal", "M", "70", "9000000005"]]
+    rows = [["KRP/1", "Ravi Kumar", "M", "40", "9000000001"],
+            ["KRP/2", "Sita Devi", "F", "35", "9000000002"],
+            ["KRP/3", "Asha Rani", "F", "50", "9000000003"],
+            ["KRP/4", "Gita", "Devi", "F", "62"],
+            ["KRP/5", "Mohan Lal", "M", "70", "9000000005"]]
     assert find_shifted_rows(header, rows) == {3}
 
 
@@ -227,9 +227,9 @@ def test_csv_round_trip_keeps_header_rows_and_bom():
 
 
 def test_utf16_tsv_is_written_as_utf8():
-    raw = "Reg No\tNaam\nJJH-1\tकमला\n".encode("utf-16")
+    raw = "Reg No\tNaam\nJJH-1\tशांति\n".encode("utf-16")
     out = serialize(parse("r.tsv", raw))
-    assert out.decode("utf-8") == "Reg No\tNaam\nJJH-1\tकमला\n"
+    assert out.decode("utf-8") == "Reg No\tNaam\nJJH-1\tशांति\n"
 
 
 def test_text_round_trip_is_exact():

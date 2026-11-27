@@ -25,30 +25,30 @@ def clean_file(name: str, text: str) -> str:
 
 @pytest.mark.parametrize("text,expected", [
     # relation markers, English and Hindi
-    ("S/o Sukhwinder Singh", "S/o [RELATIVE]"),
-    ("D/o किशन निषाद", "D/o [RELATIVE]"),
-    ("Attendant (S/o Manoj Tiwari) informed about diet.", "Attendant (S/o [RELATIVE]) informed about diet."),
-    ("S/O SHYAM PATEL", "S/O [RELATIVE]"),
+    ("S/o Gurmeet Singh", "S/o [RELATIVE]"),
+    ("D/o मोहन मौर्य", "D/o [RELATIVE]"),
+    ("Attendant (S/o Arun Tiwari) informed about diet.", "Attendant (S/o [RELATIVE]) informed about diet."),
+    ("S/O SUNIL PATEL", "S/O [RELATIVE]"),
     ("W/o Late Ram Prasad", "W/o Late [RELATIVE]"),
-    ("Address (attendant): C/O Ramesh Patel, Ward 1", "Address (attendant): C/O [RELATIVE], [ADDRESS]"),
+    ("Address (attendant): C/O Prakash Patel, Ward 1", "Address (attendant): C/O [RELATIVE], [ADDRESS]"),
     # the fragmented-identity form
-    ("Asha, W/o Kamal, discharged in stable condition.", "[NAME], W/o [RELATIVE], discharged in stable condition."),
+    ("Asha, W/o Hemant, discharged in stable condition.", "[NAME], W/o [RELATIVE], discharged in stable condition."),
     # honorifics
-    ("Shahid sahab ka BP 117/82", "[NAME] sahab ka BP 117/82"),
-    ("Jaspreet bhai ki condition ab stable hai.", "[NAME] bhai ki condition ab stable hai."),
-    ("Report of Kamal ji  26 Y / M", "Report of [NAME] ji  26 Y / M"),
-    ("Kamal babu ka BP 130/82", "[NAME] babu ka BP 130/82"),
-    ("Smt. Kamla Devi admitted", "Smt. [NAME] admitted"),
+    ("Farhan sahab ka BP 117/82", "[NAME] sahab ka BP 117/82"),
+    ("Amarjeet bhai ki condition ab stable hai.", "[NAME] bhai ki condition ab stable hai."),
+    ("Report of Hemant ji  26 Y / M", "Report of [NAME] ji  26 Y / M"),
+    ("Hemant babu ka BP 130/82", "[NAME] babu ka BP 130/82"),
+    ("Smt. Shanti Devi admitted", "Smt. [NAME] admitted"),
     ("श्री रामलाल को दवा दी", "श्री [NAME] को दवा दी"),
     # Hinglish and Hindi sentence patterns
-    ("मोहम्मद शाहिद को 9 दिन से बुखार है।", "[NAME] को 9 दिन से बुखार है।"),
+    ("मोहम्मद फरहान को 9 दिन से बुखार है।", "[NAME] को 9 दिन से बुखार है।"),
     # timelines, attendants, possessives, chat senders
-    ("14:00 - Brajesh Yadav - K/C/O typhoid fever.", "14:00 - [NAME] - K/C/O typhoid fever."),
-    ("18:40 - Zorawar Qadri (attendant, bed 12), mob 6910522119",
+    ("14:00 - Lokesh Yadav - K/C/O typhoid fever.", "14:00 - [NAME] - K/C/O typhoid fever."),
+    ("18:40 - Fardeen Rizvi (attendant, bed 12), mob 9753400557",
      "18:40 - [RELATIVE] (attendant, bed 12), mob [PHONE]"),
-    ("Sample received from Sunita's attendant", "Sample received from [NAME]'s attendant"),
-    ("AMB-436,Sitapur,Lucknow,called by Kaveri Nambiar 94054-71434", "AMB-436,Sitapur,Lucknow,called by [RELATIVE] [PHONE]"),
-    ("[06/08/26, 11:11 pm] Deepak Mama: <attachment: report.pdf>", "[06/08/26, 11:11 pm] [RELATIVE]: <attachment: report.pdf>"),
+    ("Sample received from Savita's attendant", "Sample received from [NAME]'s attendant"),
+    ("AMB-436,Sitapur,Lucknow,called by Lavanya Iyengar 71341-85121", "AMB-436,Sitapur,Lucknow,called by [RELATIVE] [PHONE]"),
+    ("[06/08/26, 11:11 pm] Ajay Mama: <attachment: report.pdf>", "[06/08/26, 11:11 pm] [RELATIVE]: <attachment: report.pdf>"),
     # surname-first and compact initials
     ("S/o Sharma, Mohan", "S/o [RELATIVE]"),
     ("S/o R.K. Verma", "S/o [RELATIVE]"),
@@ -74,13 +74,13 @@ def test_clinical_and_common_text_is_untouched(text):
 
 
 @pytest.mark.parametrize("text,expected", [
-    ("Address: Makan No. 12, Gram Shivmau Khurd, Tehsil Haidergarh, Distt. Barabanki - 225362",
+    ("Address: Makan No. 12, Gram Hiramau Khurd, Tehsil Haidergarh, Distt. Barabanki - 225362",
      "Address: [ADDRESS], Gram [VILLAGE], Tehsil Haidergarh, Distt. Barabanki - 225***"),
-    ("H.No. 364, Ward 20, Mohalla Raja Bazar, near Pani Tanki, Tehsil Lalganj, Distt. Rae Bareli",
+    ("H.No. 364, Ward 20, Mohalla Naya Bazar, near Pani Tanki, Tehsil Lalganj, Distt. Rae Bareli",
      "[ADDRESS], [ADDRESS], [ADDRESS], [ADDRESS], Tehsil Lalganj, Distt. Rae Bareli"),
-    ("Address: House 87, Ward 10, Mohalla Tilak Nagar, Durgamau Kalan, Tehsil Lalganj, Distt. Rae Bareli - 229678",
+    ("Address: House 87, Ward 10, Mohalla Azad Nagar, Lakhmau Kalan, Tehsil Lalganj, Distt. Rae Bareli - 229678",
      "Address: [ADDRESS], [ADDRESS], [ADDRESS], [VILLAGE], Tehsil Lalganj, Distt. Rae Bareli - 229***"),
-    ("पता: मकान नं. 398, ग्राम भीमनगर, तहसील कादीपुर, जिला सुल्तानपुर - 228076",
+    ("पता: मकान नं. 398, ग्राम सोहननगर, तहसील कादीपुर, जिला सुल्तानपुर - 228076",
      "पता: [ADDRESS], ग्राम [VILLAGE], तहसील कादीपुर, जिला सुल्तानपुर - 228***"),
     ("मकान नं. 32, जामा मस्जिद के पीछे, तहसील नवाबगंज", "[ADDRESS], [ADDRESS], तहसील नवाबगंज"),
     ("PIN Code: 226001", "PIN Code: 226***"),
@@ -97,13 +97,13 @@ def test_lab_values_that_look_like_pin_codes_are_kept():
 
 
 def test_names_spread_within_the_same_file():
-    note = ("मरीज़ का नाम: मोहम्मद शाहिद\n"
-            "Shahid ki tabiyat theek hai. Mohd. Shahid ko discharge kiya.\n"
-            "Dr. Shahid Ansari reviewed.\n")
+    note = ("मरीज़ का नाम: मोहम्मद फरहान\n"
+            "Farhan ki tabiyat theek hai. Mohd. Farhan ko discharge kiya.\n"
+            "Dr. Farhan Ansari reviewed.\n")
     out = clean_file("notes/n.txt", note)
     assert out == ("मरीज़ का नाम: [NAME]\n"
                    "[NAME] ki tabiyat theek hai. [NAME] ko discharge kiya.\n"
-                   "Dr. Shahid Ansari reviewed.\n")
+                   "Dr. Farhan Ansari reviewed.\n")
 
 
 def test_names_do_not_spread_to_other_files():
@@ -114,8 +114,8 @@ def test_names_do_not_spread_to_other_files():
 
 def test_village_and_pin_columns():
     csv_text = ("UHID,Patient Name,Gaon,Tehsil,Jila,Pin Code\n"
-                "JJH-0077305,Kamla Nishad,Amarganj Khurd,Nawabganj,Barabanki,225127\n"
-                "JJH-0076928,Rina Nishad,Bhimnagar,Kadipur,Sultanpur,228076\n")
+                "MVH-3388234,Shanti Maurya,Kesarganj Khurd,Nawabganj,Barabanki,225127\n"
+                "MVH-3389706,Rina Maurya,Sohannagar,Kadipur,Sultanpur,228076\n")
     lines = clean_file("registration/r.csv", csv_text).splitlines()
     assert lines[1].split(",")[1:] == ["[NAME]", "[VILLAGE]", "Nawabganj", "Barabanki", "225***"]
 
@@ -130,9 +130,9 @@ def test_fhir_extension_with_a_name_url():
 
 
 def test_json_address_fields():
-    data = {"patients": [{"uhid": "DHH2026-084999", "name": "Sunita Patel",
-                          "address": {"line": "H.No. 414, Ward 1, Mohalla Chowk Kotwali, near Gurudwara",
-                                      "village": "Bhimpur", "tehsil": "Bilgram", "district": "Hardoi",
+    data = {"patients": [{"uhid": "RGH2026-361777", "name": "Savita Patel",
+                          "address": {"line": "H.No. 414, Ward 1, Mohalla Purani Kotwali, near Gurudwara",
+                                      "village": "Sohanpur", "tehsil": "Bilgram", "district": "Hardoi",
                                       "pin": "241606"}}]}
     out = json.loads(clean_file("registration/d.json", json.dumps(data)))["patients"][0]["address"]
     assert out == {"line": "[ADDRESS], [ADDRESS], [ADDRESS], [ADDRESS]", "village": "[VILLAGE]",

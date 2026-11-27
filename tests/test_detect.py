@@ -35,28 +35,28 @@ def test_phone_formats(phone):
 
 
 @pytest.mark.parametrize("value,expected", [
-    ("3972 0583 9628", "[AADHAAR]"), ("3972-0583-9628", "[AADHAAR]"), ("397205839628", "[AADHAAR]"),
-    ("XXXX XXXX 5866", "[AADHAAR]"), ("91-7938-3729-8403", "[ABHA]"), ("ravi.k@abdm", "[ABHA]"),
-    ("FEAPC0181I", "[PAN]"), ("ravi.kumar@example.com", "[EMAIL]"), ("PMJAY-UP-8758791961", "[INSURANCE_ID]"),
-    ("POL/44/22262805", "[INSURANCE_ID]"), ("98XXXXXX10", "[PHONE]"),
+    ("3972 0583 9628", "[AADHAAR]"), ("2780-3462-7906", "[AADHAAR]"), ("278034627906", "[AADHAAR]"),
+    ("XXXX XXXX 4699", "[AADHAAR]"), ("75-8726-2807-6132", "[ABHA]"), ("ravi.k@abdm", "[ABHA]"),
+    ("KLMPD0181I", "[PAN]"), ("ravi.kumar@example.com", "[EMAIL]"), ("PMJAY-UP-6846875795", "[INSURANCE_ID]"),
+    ("POL/11/00090634", "[INSURANCE_ID]"), ("98XXXXXX10", "[PHONE]"),
     ("1234 5678-9012", "[AADHAAR]"), ("XX-XXXX-XXXX-1234", "[ABHA]"),
 ])
 def test_identifier_shapes(value, expected):
     assert clean(f"id {value} end") == f"id {expected} end"
 
 
-@pytest.mark.parametrize("mrn", ["SNJ/26/064127", "JJH-0077305", "UHID-010610", "IPD-2026-00432",
-                                 "ADM000161", "DHH-IPD-00591", "DHH2026-084999", "KXF/26/064127",
-                                 "uhid-2025-00412", "PATIENT-001234", "UP-LKO-JJH-001234"])
+@pytest.mark.parametrize("mrn", ["KRP/26/391508", "MVH-3388234", "UHID-353953", "IPD-0309-33120",
+                                 "ADM333595", "RGH-IPD-33475", "RGH2026-361777", "KXF/26/391508",
+                                 "uhid-2025-00412", "PATIENT-001234", "UP-LKO-MVH-001234"])
 def test_hospital_numbers_become_keyed_tokens(mrn):
     out = clean(f"UHID {mrn}.")
     assert out.startswith("UHID ID-") and mrn not in out
 
 
 def test_keyed_token_is_stable_and_secret_dependent():
-    a = keyed_token(KEYS, "MRN", "SNJ/26/064127")
-    assert a == keyed_token(KEYS, "MRN", "snj-26-064127")
-    assert a != keyed_token(Keys(b"other"), "MRN", "SNJ/26/064127")
+    a = keyed_token(KEYS, "MRN", "KRP/26/391508")
+    assert a == keyed_token(KEYS, "MRN", "krp-26-391508")
+    assert a != keyed_token(Keys(b"other"), "MRN", "KRP/26/391508")
 
 
 @pytest.mark.parametrize("text", [
@@ -73,16 +73,16 @@ def test_clinical_text_is_untouched(text):
 @pytest.mark.parametrize("text,expected", [
     ("Name: Ravi Kumar", "Name: [NAME]"),
     ("Patient Name: Ravi Kumar        Age/Sex: 52 Yrs/F", "Patient Name: [NAME]        Age/Sex: 52 Yrs/F"),
-    ("नाम: मोहम्मद शाहिद   आयु: 39 वर्ष", "नाम: [NAME]   आयु: 39 वर्ष"),
-    ("मरीज़ का नाम: कमला निषाद", "मरीज़ का नाम: [NAME]"),
+    ("नाम: मोहम्मद फरहान   आयु: 39 वर्ष", "नाम: [NAME]   आयु: 39 वर्ष"),
+    ("मरीज़ का नाम: शांति मौर्य", "मरीज़ का नाम: [NAME]"),
     ("Rogi ka naam: Sita Devi", "Rogi ka naam: [NAME]"),
     ("Patient's Name - Asha Rani", "Patient's Name - [NAME]"),
-    ("Attendant: Zubair Khan", "Attendant: [RELATIVE]"),
+    ("Attendant: Asif Khan", "Attendant: [RELATIVE]"),
     ("Name: Ravi Kumar S/o Mohan Lal", "Name: [NAME] S/o Mohan Lal"),
     ("Name: Sharma, Ravi", "Name: [NAME]"),
     ("Patient Name: YADAV, RAMESH KUMAR", "Patient Name: [NAME]"),
     ("Name: Ram Kumar/45/M", "Name: [NAME]/45/M"),
-    ("Patient: Anita Sharma/F/32", "Patient: [NAME]/F/32"),
+    ("Patient: Pooja Sharma/F/32", "Patient: [NAME]/F/32"),
 ])
 def test_labelled_names(text, expected):
     assert clean(text) == expected
@@ -106,13 +106,13 @@ def test_profiler_by_values_and_hints():
     assert profiler.classify(["Dr. A Sharma", "Dr. B Rao"], "seen_by") == profiler.DOCTOR
     assert profiler.classify(["Medicine", "Surgery"], "department") == profiler.UNKNOWN
     assert profiler.classify(["female", "male"], "gender") == profiler.UNKNOWN
-    assert profiler.classify(["0077270", "0077112"], "Reg No") == "MRN"
+    assert profiler.classify(["3388083", "3388550"], "Reg No") == "MRN"
     assert profiler.classify(["30/06/2025", "29/06/2024"], "Reg Date") == profiler.UNKNOWN
     assert profiler.classify(["C/O fever x 3 days", "C/O cough"], "complaints") == profiler.UNKNOWN
 
 
 def test_care_of_is_a_relation_only_before_a_name():
-    assert profiler.relation_cue_end("C/O Naresh Chauhan") is not None
+    assert profiler.relation_cue_end("C/O Mukesh Rathore") is not None
     assert profiler.relation_cue_end("C/O fever for 3 days") is None
     assert profiler.relation_cue_end("H/O TB 8 yrs back") is None
 
@@ -120,8 +120,8 @@ def test_care_of_is_a_relation_only_before_a_name():
 # --------------------------------------------------------------------------- whole files
 def test_registration_csv():
     raw = ("UHID,Patient Name,Gender,Relation,Relative Name,Mobile,Aadhaar No,Notes\n"
-           "SNJ/26/064127,Mahesh Chauhan,M,S/o,Naresh Chauhan,+91 72864 90658,397205839628,BP 120/80\n"
-           "SNJ/26/064128,Sita Devi,F,W/o,Ram Prasad,9876543210,3972 0583 9628,K/C/O HTN\n").encode()
+           "KRP/26/391508,Dinesh Rathore,M,S/o,Mukesh Rathore,+91 80691 73946,278034627906,BP 120/80\n"
+           "KRP/26/064128,Sita Devi,F,W/o,Ram Prasad,9876543210,3972 0583 9628,K/C/O HTN\n").encode()
     parsed, out = run_file("registration/r.csv", raw)
     lines = out.splitlines()
     assert lines[0] == "UHID,Patient Name,Gender,Relation,Relative Name,Mobile,Aadhaar No,Notes"
@@ -133,9 +133,9 @@ def test_registration_csv():
 
 def test_json_record_with_nested_person_fields():
     raw = json.dumps({"patients": [{
-        "uhid": "DHH2026-084999", "name": {"first": "Sunita", "last": "Patel", "local": "सुनीता पटेल"},
-        "gender": "female", "age": 51, "guardian": {"relation": "D/o", "name": "Ramesh Patel"},
-        "contact": {"mobile": "8599253525"}, "ids": {"aadhar_no": 902115225016},
+        "uhid": "RGH2026-361777", "name": {"first": "Savita", "last": "Patel", "local": "सविता पटेल"},
+        "gender": "female", "age": 51, "guardian": {"relation": "D/o", "name": "Prakash Patel"},
+        "contact": {"mobile": "6477042404"}, "ids": {"aadhar_no": 730554004359},
         "notes": "C/O fever for 3 days"}]}, ensure_ascii=False).encode()
     parsed, out = run_file("registration/p.json", raw)
     p = json.loads(out)["patients"][0]
@@ -149,11 +149,11 @@ def test_json_record_with_nested_person_fields():
 
 def test_fhir_patient_and_practitioner():
     bundle = {"resourceType": "Bundle", "entry": [
-        {"resource": {"resourceType": "Patient", "name": [{"text": "Shabana Bano", "given": ["Shabana"]}],
+        {"resource": {"resourceType": "Patient", "name": [{"text": "Salma Bano", "given": ["Salma"]}],
                       "telecom": [{"system": "phone", "value": "9876543210"}],
-                      "identifier": [{"system": "https://h.example/uhid", "value": "SNJ/26/064545"}]}},
+                      "identifier": [{"system": "https://h.example/uhid", "value": "KRP/26/391414"}]}},
         {"resource": {"resourceType": "Practitioner", "name": [{"text": "Dr. Imtiaz Ahmed"}]}},
-        {"resource": {"resourceType": "Composition", "subject": {"reference": "urn:uuid:1", "display": "Shabana Bano"},
+        {"resource": {"resourceType": "Composition", "subject": {"reference": "urn:uuid:1", "display": "Salma Bano"},
                       "author": [{"reference": "urn:uuid:2", "display": "Dr. Imtiaz Ahmed"}]}},
     ]}
     parsed, out = run_file("fhir/b.json", json.dumps(bundle).encode())
@@ -169,7 +169,7 @@ def test_fhir_patient_and_practitioner():
 
 
 def test_overlaps_resolve_to_the_longest_span():
-    text = "PMJAY-UP-8758791961"
+    text = "PMJAY-UP-6846875795"
     spans = resolve(patterns.find_identifiers(text))
     assert len(spans) == 1 and (spans[0].start, spans[0].end, spans[0].type) == (0, len(text), "INSURANCE_ID")
 

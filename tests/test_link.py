@@ -18,21 +18,21 @@ def test_transliteration(deva, latin):
     assert transliterate(deva) == latin
 
 
-@pytest.mark.parametrize("a,b", [("Mohammad Shahid", "मोहम्मद शाहिद"), ("Mohd. Shahid", "Shahid sahab"),
-                                 ("Reena Nishad", "रीना निषाद"), ("Kavita Pandey", "Kavitha Pande"),
-                                 ("Jaspreet Singh", "जसप्रीत सिंह"), ("Geeta Chauhan", "Gita Chauhan")])
+@pytest.mark.parametrize("a,b", [("Mohammad Farhan", "मोहम्मद फरहान"), ("Mohd. Farhan", "Farhan sahab"),
+                                 ("Reena Maurya", "रीना मौर्य"), ("Kavita Mishra", "Kavitha Misra"),
+                                 ("Amarjeet Singh", "अमरजीत सिंह"), ("Geeta Rathore", "Gita Rathore")])
 def test_same_name_across_scripts_and_spellings(a, b):
     assert phonetic.names_match(phonetic.name_tokens(a), phonetic.name_tokens(b))
 
 
 @pytest.mark.parametrize("a,b", [("Rina", "Rani"), ("Asha", "Usha"), ("Ramesh Kumar", "Suresh Kumar"),
-                                 ("Sunita Yadav", "Sunil Yadav")])
+                                 ("Sunita Saxena", "Sunil Saxena")])
 def test_different_names_stay_apart(a, b):
     assert not phonetic.names_match(phonetic.name_tokens(a), phonetic.name_tokens(b))
 
 
 def test_generic_name_parts_do_not_count():
-    assert phonetic.name_tokens("Md. Shahid Kumar ji") == ["sahid"]
+    assert phonetic.name_tokens("Md. Farhan Kumar ji") == ["farhan"]
 
 
 # --------------------------------------------------------------------------- dates
@@ -58,16 +58,16 @@ def names(s):
 
 
 def test_shared_record_number_links_even_with_an_age_typo():
-    a = rec(1, names=names("Zainab Siddiqui"), ids={("MRN", "JJH0077112")}, birth_years=[(1993, 2)], gender="F")
-    b = rec(2, names=names("Zenab Siddiqui"), ids={("MRN", "JJH0077112")}, birth_years=[(2003, 2)], gender="F")
+    a = rec(1, names=names("Afreen Qureshi"), ids={("MRN", "MVH3388550")}, birth_years=[(1993, 2)], gender="F")
+    b = rec(2, names=names("Afrin Qureshi"), ids={("MRN", "MVH3388550")}, birth_years=[(2003, 2)], gender="F")
     groups = link([a, b])
     assert groups[0] == groups[1]
 
 
 def test_same_name_different_people_are_never_merged():
-    a = rec(1, names=names("Ramesh Yadav"), village="bhimpur", birth_years=[(1970, 2)],
+    a = rec(1, names=names("Pramod Yadav"), village="sohanpur", birth_years=[(1970, 2)],
             relatives=[("parent", ["mohan"])])
-    b = rec(2, names=names("Ramesh Yadav"), village="bhimpur", birth_years=[(1972, 2)],
+    b = rec(2, names=names("Pramod Yadav"), village="sohanpur", birth_years=[(1972, 2)],
             relatives=[("parent", ["sohan"])])
     groups = link([a, b])
     assert groups[0] != groups[1]
@@ -81,43 +81,43 @@ def test_name_plus_relative_links_a_fragment():
 
 
 def test_name_alone_does_not_link():
-    groups = link([rec(1, names=names("Kavita Pandey")), rec(2, names=names("Kavita Pandey"))])
+    groups = link([rec(1, names=names("Kavita Mishra")), rec(2, names=names("Kavita Mishra"))])
     assert groups[0] != groups[1]
 
 
 def test_household_phone_does_not_merge_family_members():
-    a = rec(1, names=names("Sunita Yadav"), ids={("PHONE", "9876543210")}, gender="F")
-    b = rec(2, names=names("Ramesh Yadav"), ids={("PHONE", "9876543210")}, gender="M")
+    a = rec(1, names=names("Savita Yadav"), ids={("PHONE", "9876543210")}, gender="F")
+    b = rec(2, names=names("Pramod Yadav"), ids={("PHONE", "9876543210")}, gender="M")
     groups = link([a, b])
     assert groups[0] != groups[1]
 
 
 def test_shared_phone_links_the_same_person():
-    a = rec(1, names=names("Sunita Yadav"), ids={("PHONE", "9876543210")})
-    b = rec(2, names=names("सुनीता यादव"), ids={("PHONE", "9876543210")})
+    a = rec(1, names=names("Savita Yadav"), ids={("PHONE", "9876543210")})
+    b = rec(2, names=names("सविता यादव"), ids={("PHONE", "9876543210")})
     groups = link([a, b])
     assert groups[0] == groups[1]
 
 
 def test_conflicting_aadhaar_blocks_a_merge():
-    a = rec(1, names=names("Anita Sharma"), ids={("MRN", "X1"), ("AADHAAR", "111122223333")})
-    b = rec(2, names=names("Anita Sharma"), ids={("MRN", "X1"), ("AADHAAR", "444455556666")})
+    a = rec(1, names=names("Pooja Sharma"), ids={("MRN", "X1"), ("AADHAAR", "111122223333")})
+    b = rec(2, names=names("Pooja Sharma"), ids={("MRN", "X1"), ("AADHAAR", "444455556666")})
     groups = link([a, b])
     assert groups[0] != groups[1]
 
 
 def test_records_without_patient_evidence_or_with_several_patients_stay_unlinked():
     empty = rec(1)
-    several = rec(2, names=names("Zainab Siddiqui") + names("Neha Paswan"), multi_patient=True)
+    several = rec(2, names=names("Afreen Qureshi") + names("Seema Paswan"), multi_patient=True)
     assert link([empty, several]) == [None, None]
 
 
 def test_single_name_links_only_to_a_unique_full_name_group():
-    full = rec(1, names=names("Mohammad Shahid Khan"), village="mohanganj kalan", birth_years=[(1987, 2)],
+    full = rec(1, names=names("Mohammad Farhan Khan"), village="rampalganj kalan", birth_years=[(1987, 2)],
                ids={("MRN", "A1")})
-    rx = rec(2, names=names("मोहम्मद शाहिद"), village="mohanaganj kalan", birth_years=[(1987, 2)])
+    rx = rec(2, names=names("मोहम्मद फरहान"), village="rampalaganj kalan", birth_years=[(1987, 2)])
     assert link([full, rx])[0] == link([full, rx])[1]
-    other = rec(3, names=names("Shahid Ansari"), village="mohanganj kalan", birth_years=[(1986, 2)],
+    other = rec(3, names=names("Farhan Ansari"), village="rampalganj kalan", birth_years=[(1986, 2)],
                 ids={("MRN", "B2")})
     groups = link([full, rx, other])
     assert groups[1] not in (groups[0], groups[2])
@@ -138,9 +138,9 @@ def test_pseudonym_is_written_inside_each_record(tmp_path, monkeypatch):
     (inp / "notes").mkdir()
     (inp / "registration" / "r.csv").write_text(
         "UHID,Patient Name,Gender,Relation,Relative Name,Mobile\n"
-        "SNJ/26/064127,Mahesh Chauhan,M,S/o,Naresh Chauhan,9876543210\n")
-    (inp / "notes" / "n.txt").write_text("Name: Mahesh Chauhan\nUHID: SNJ/26/064127\nBP 120/80\n")
-    (inp / "notes" / "m.txt").write_text("Mahesh sahab ka BP 130/80. S/o Naresh Chauhan informed.\n")
+        "KRP/26/391508,Dinesh Rathore,M,S/o,Mukesh Rathore,9876543210\n")
+    (inp / "notes" / "n.txt").write_text("Name: Dinesh Rathore\nUHID: KRP/26/391508\nBP 120/80\n")
+    (inp / "notes" / "m.txt").write_text("Dinesh sahab ka BP 130/80. S/o Mukesh Rathore informed.\n")
     out = tmp_path / "out"
     assert pipeline.run(inp, out) == 0
     records = [json.loads(line) for line in (out / "records.jsonl").read_text().splitlines()]
@@ -183,9 +183,9 @@ def test_dataset_year_links_historical_cohort(tmp_path, monkeypatch):
     inp.mkdir()
     (inp / "reg.csv").write_text(
         "Patient Name,DOB,Gaon,Visit Date\n"
-        "Mahesh Chauhan,12/04/1981,Durgamau Kalan,15/05/2021\n"
-        "Sita Verma,10/06/1991,Bhimpur,20/05/2021\n")
-    (inp / "note.txt").write_text("Name: Mahesh Chauhan   Age/Sex: 40/M\nAddress: Gram Durgamau Kalan, Tehsil Lalganj\n")
+        "Dinesh Rathore,12/04/1981,Lakhmau Kalan,15/05/2021\n"
+        "Sita Verma,10/06/1991,Sohanpur,20/05/2021\n")
+    (inp / "note.txt").write_text("Name: Dinesh Rathore   Age/Sex: 40/M\nAddress: Gram Lakhmau Kalan, Tehsil Lalganj\n")
     out = tmp_path / "out"
     assert pipeline.run(inp, out) == 0
     recs = [json.loads(l) for l in (out / "records.jsonl").read_text().splitlines()]

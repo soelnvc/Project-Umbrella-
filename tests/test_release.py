@@ -45,8 +45,8 @@ def test_withheld_fhir_birth_date_uses_the_standard_marker(tmp_path, monkeypatch
     inp = tmp_path / "in"
     (inp / "fhir").mkdir(parents=True)
     bundle = _bundle(birthDate="1977-04-12", gender="male",
-                     name=[{"text": "Mahesh Chauhan"}],
-                     identifier=[{"system": "uhid", "value": "SNJ/26/064127"}])
+                     name=[{"text": "Dinesh Rathore"}],
+                     identifier=[{"system": "uhid", "value": "KRP/26/391508"}])
     (inp / "fhir" / "b.json").write_text(json.dumps(bundle))
     out = tmp_path / "out"
     assert pipeline.run(inp, out) == 0
@@ -68,7 +68,7 @@ def test_standalone_fhir_resource_and_practitioner_protection(tmp_path, monkeypa
         "entry": [
             {"fullUrl": "urn:uuid:p1", "resource": {
                 "resourceType": "Patient", "id": "p1", "name": [{"text": "Ramesh Kumar"}],
-                "identifier": [{"system": "http://h.in/uhid", "value": "SNJ/26/064127"}],
+                "identifier": [{"system": "http://h.in/uhid", "value": "KRP/26/391508"}],
                 "managingOrganization": {"reference": "Organization/ext-1"},
             }},
             {"fullUrl": "urn:uuid:pr1", "resource": {
@@ -174,8 +174,8 @@ def _two_files(tmp_path, monkeypatch):
     monkeypatch.setenv("RAKSHA_SECRET", "s")
     inp = tmp_path / "in"
     inp.mkdir()
-    (inp / "a.csv").write_text("UHID,Patient Name,Mobile\nSNJ/26/064127,Mahesh Chauhan,9876543210\n")
-    (inp / "b.txt").write_text("Patient Name: Mahesh Chauhan\nUHID: SNJ/26/064127\nDiagnosis: Typhoid\n")
+    (inp / "a.csv").write_text("UHID,Patient Name,Mobile\nSNJ/09/391508,Dinesh Rathore,9876543210\n")
+    (inp / "b.txt").write_text("Patient Name: Dinesh Rathore\nUHID: KRP/26/391508\nDiagnosis: Typhoid\n")
     return inp
 
 
@@ -210,4 +210,4 @@ def test_privacy_failure_still_releases_scrubbed_files(tmp_path, monkeypatch):
     out = tmp_path / "out"
     assert pipeline.run(inp, out) == 0
     text = "".join(p.read_text() for p in (out / "sanitized").rglob("*") if p.is_file())
-    assert "Mahesh" not in text and "9876543210" not in text
+    assert "Dinesh" not in text and "9876543210" not in text
