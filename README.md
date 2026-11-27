@@ -1,4 +1,4 @@
-# Umbrella
+# Project Umbrella
 
 **Offline, CPU-only, model-free privacy firewall for multilingual Indian hospital records (English, हिंदी & Hinglish).**  
 Built for **Track 3 — Secret Wards** by **Team JenSON**: Siddhesh Goel *(Leader)*, Krishna Bhatia, and Nithin Jagganatham.
