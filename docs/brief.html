@@ -119,7 +119,7 @@ the release against the published voter-list attacker.</div>
   <li><b>Privacy layer.</b> Per patient: one keyed <code>&plusmn;30&ndash;180d</code> shift (stays and intervals remain exact),
     withheld DOB (FHIR <code>data-absent-reason: masked</code>), one truthful age band (<code>10/20-yr</code>, <code>90+</code>),
     village &rarr; tehsil, and 3-digit PIN. Groups below <code>k=5</code> escalate to district and <code>20-yr</code> bands;
-    cohort-scaled rare diagnoses (&le;1 to &le;3 patients) become ICD-10 chapters, rare procedures are withheld, and high-risk discharges jitter +1 day.</li>
+    cohort-scaled rare diagnoses (&le;1 to &le;3 patients) become ICD-10 chapters and rare procedures are withheld.</li>
 </ul>
 
 <h2>3. USP</h2>
@@ -143,11 +143,11 @@ the release against the published voter-list attacker.</div>
   <tr><td>Patient linking: precision / recall / F0.5 (wrong merges)</td><td class="n"><b>1.00 / 0.98 / 1.00</b> (0)</td></tr>
   <tr><td>Our attacker: patients re-identified from pooled records (raw data 98%)</td><td class="n"><b>23%</b></td></tr>
   <tr><td>Our attacker: voter-list record linkage probability on true person (raw 92%)</td><td class="n"><b>5%</b></td></tr>
-  <tr><td>Our attacker: targeted attack with known visit facts (raw 100%)</td><td class="n">58%</td></tr>
+  <tr><td>Our attacker: targeted attack with known visit facts (raw 100%)</td><td class="n">56&ndash;66% (by secret)</td></tr>
   <tr><td>Pseudonyms reversible; pseudonyms or shifts stable under a new secret</td><td class="n">0%; 0%</td></tr>
   <tr><td>Unique in release on (age band, district, admission week, diagnoses)</td><td class="n">50 of 57 patients</td></tr>
   <tr><td>Speed / peak RSS: practice set; 16&times; larger set (growth exponent)</td><td class="n">1.4 s / 49 MB; 22 s / 331 MB (0.99)</td></tr>
-  <tr><td><b>Unseen formats</b> (5 chaos seeds: new names, IDs, prefixes, columns, keys, dates)</td><td class="n"><b>0.0% leaked</b>; 0 of 8 canaries</td></tr>
+  <tr><td><b>Unseen formats</b> (7 chaos seeds: new names, IDs, prefixes, columns, keys, dates)</td><td class="n"><b>0.0% leaked</b>; 0 of 8 canaries</td></tr>
 </table>
 
 <div class="subhead">Why we chose these trade-offs</div>
@@ -155,9 +155,9 @@ the release against the published voter-list attacker.</div>
   <li><b>Withheld DOB + 10/20-year age bands:</b> Shifting DOB still reveals birth year; masking DOB slashed pooled
     re-identification from <b>69% &rarr; 23%</b> while truthful bands preserve age-stratified epidemiology.</li>
   <li><b>Tehsil + 3-digit PIN + per-patient date shifts:</b> Preserves regional public-health clustering and keeps every
-    follow-up interval and stay length exact (high-risk discharges move +1 day to defeat exact-stay matching).</li>
+    follow-up interval and stay length exact (a +1-day discharge jitter was tested and dropped: no attack gain, inexact stays).</li>
   <li><b>Cohort-scaled rare conditions vs. common diagnoses:</b> Only rare diagnoses (mapped to ICD-10 chapters) and rare
-    procedures cost the remaining 0.8% of medical values. Common diagnoses stay intact, explaining the 58% targeted-attack ceiling
+    procedures cost the remaining 0.8% of medical values. Common diagnoses stay intact, explaining the 56&ndash;66% targeted-attack ceiling
     (suppressing common conditions would destroy clinical utility). In a 57-patient cohort 50/57 look unique internally, whereas
     the real attacker must search a voter register 4&ndash;5&times; larger.</li>
 </ul>
@@ -180,7 +180,7 @@ the release against the published voter-list attacker.</div>
 <ul>
   <li><b>Deterministic rules, zero models:</b> An unlabelled name absent from all context cues and lexicons in an unseen layout
     could be missed (mitigated by value-based column profiling, chaos testing and the release gate).</li>
-  <li><b>Targeted attack (58%):</b> Remains elevated because common diagnoses are kept; our local attacker is also simpler than
+  <li><b>Targeted attack (56&ndash;66%):</b> Remains elevated because common diagnoses are kept; our local attacker is also simpler than
     the official evaluator on linkage and targeted attacks, so those two figures may understate official risk.</li>
   <li><b>Small-cohort <code>k=5</code>:</b> Unreachable on 57 patients even at district + 20-year bands; rare-value rules protect outliers instead.</li>
   <li><b>Binary formats &amp; single giant JSONs:</b> PDF, image and XML files are quarantined rather than OCR/parsed; a single
@@ -188,7 +188,7 @@ the release against the published voter-list attacker.</div>
   <li><b>Next:</b> Context-scored diagnosis generalisation against targeted attacks, and streaming linkage for multi-GB JSONs.</li>
 </ul>
 <div class="small">Reproducible end-to-end via <code>bash tools/verify.sh --submit --scale</code> (358 unit tests, 3-run determinism &amp;
-secret rotation, <code>validate_output.py</code>, <code>check_dev.py</code>, 5-seed chaos mutator, attacker suite and linear scaling check).</div>
+secret rotation, <code>validate_output.py</code>, <code>check_dev.py</code>, chaos mutator, attacker suite and linear scaling check).</div>
 
 </body>
 </html>

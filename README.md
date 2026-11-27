@@ -160,7 +160,7 @@ Shield spans block name/address false positives while allowing direct-identifier
 ### 5. Per-Patient Privacy Plan (`src/privacy/`, `config/policy.yaml`)
 - **Uniform date shift & withheld DOB:** One keyed `±30..180` day shift per patient preserves every admission-to-discharge stay and follow-up interval (day-first vs. month-first inferred per file/hospital source; `Mon DD, YYYY`, numeric, and ISO formats preserved). **DOBs are withheld** (`[DOB]`; FHIR `_birthDate` `data-absent-reason: masked`) because a shifted DOB still leaks birth year (**69% → 23%** pooled re-identification).
 - **Truthful age bands & k-escalation:** One band per patient (`10`-year, escalating to `20`-year with `5`/`10`-year boundary offsets when recorded ages straddle a decade; clamped at `0`, top-coded at `90+`). Villages generalise to tehsil; groups below `k = 5` on `(gender, age_band, place)` escalate to district, then `20`-year bands.
-- **High-risk & rare-condition protection:** Cohort-scaled rarity cap (`1` patient for cohorts ≤ 80, `2` for ≤ 160, `3` above 160) generalises rare diagnoses (codes + free text) to their **ICD-10 chapter**, withholds rare procedures, and jitters discharge dates by `+1` day for high-risk profiles (rare diagnosis/procedure, stay length ≤ 3 patients, or age ≤ 5 / ≥ 85).
+- **High-risk & rare-condition protection:** Cohort-scaled rarity cap (`1` patient for cohorts ≤ 80, `2` for ≤ 160, `3` above 160) generalises rare diagnoses (codes + free text) to their **ICD-10 chapter** and withholds rare procedures. Stay lengths are never altered: an optional `+1`-day discharge jitter for high-risk profiles (`los_jitter_high_risk`) is **off**, because it broke the exact stay for 14 of 26 admitted practice patients without lowering A4 or A5 in our attacker across six secrets.
 
 ### 6. In-Memory Release Gate (`src/release/`)
 Before disk commit, every rendered file must pass:
@@ -178,11 +178,11 @@ Before disk commit, every rendered file must pass:
 | **A1** — Direct identifier exposure | 100% | **0%** | Zero names, phones, emails, IDs, or canaries survive |
 | **A2 / A3** — Voter-list record linkage | 92% | **5%** | Posterior probability mass on the true person |
 | **A4** — Longitudinal profile pooling | 98% | **23%** | Driven down from 69% by withholding DOB & consistent shifts |
-| **A5** — Targeted visit-fact attack | 100% | **58%** | Common diagnoses are deliberately kept for clinical utility |
+| **A5** — Targeted visit-fact attack | 100% | **56–66%** | Varies with the secret; common diagnoses are deliberately kept for clinical utility |
 | **A6 / A7** — Pseudonym inversion / cross-secret link | — | **0% / 0%** | Keyed HMAC over anchor locator; rotates under new secret |
 
 ### Unseen-Format Chaos Suite & Linear Runtime Scaling
-- **Zero practice-data tuning (`tools/chaos_mutator.py`):** Replaces every name with invented Latin & Devanagari tokens absent from our lexicons, mutates phone/Aadhaar/ID formats & hospital prefixes, rewrites CSV headers, JSON keys, and Hindi/Hinglish labels, and scrambles date formats (`truth.json` read-only; leak checker calibrated on raw scrambled input first). Across **5 independent seeds** (`809–840` injected PII values each): **0.0% leaked** and **0 / 8 canaries**.
+- **Zero practice-data tuning (`tools/chaos_mutator.py`):** Replaces every name with invented Latin & Devanagari tokens absent from our lexicons, mutates phone/Aadhaar/ID formats & hospital prefixes, rewrites CSV headers, JSON keys, and Hindi/Hinglish labels, and scrambles date formats (`truth.json` read-only; leak checker calibrated on raw scrambled input first). Across **7 independent seeds** (`809–840` injected PII values each; `verify.sh` runs one seed per invocation, `--seed N` selects it): **0.0% leaked** and **0 / 8 canaries**.
 
 | Workload (`tools/scale_check.py`, Apple M-series, 1 core) | Records | Time | Peak RSS |
 |---|---:|---:|---:|
@@ -202,6 +202,6 @@ Before disk commit, every rendered file must pass:
 - **Zero side-channel leakage:** `RAKSHA_SECRET` never leaves memory and derives domain-separated subkeys. Logs emit event codes and integer counts only; exceptions log class names only; warnings are silenced; `input/`, `TMPDIR`, and `HOME` remain untouched; `720 s` watchdog guarantees clean termination and ledger-to-disk reconciliation.
 - **Known limitations:**
   1. *Rule-based ceiling:* An unlabelled name absent from all context cues and word lists in an unseen layout could slip past Pass 1 (mitigated by column profiling and the release gate).
-  2. *Targeted attack (58%):* Common diagnoses are intentionally preserved for research utility; our local attacker is also simpler than the official evaluator on A2/A3 and A5.
-  3. *Small-cohort `k = 5`:* On 57 patients, district + 20-year bands still leave small groups; rare-diagnosis/procedure/LOS rules protect outliers instead.
+  2. *Targeted attack (56–66%, by secret):* Common diagnoses are intentionally preserved for research utility; our local attacker is also simpler than the official evaluator on A2/A3 and A5.
+  3. *Small-cohort `k = 5`:* On 57 patients, district + 20-year bands still leave small groups; rare-diagnosis/procedure rules protect outliers instead.
   4. *Quarantined binaries & large single files:* `PDF`, images, and `XML` are quarantined rather than OCR/parsed; a single `25 MB` JSON file peaks at `1.6 GB` RSS because all records link in memory; ambiguous dates (`03/04`) fall back to day-first when neither file nor hospital source disambiguates; withheld DOBs trade exact age-at-visit for strong re-identification defence.

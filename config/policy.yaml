@@ -17,7 +17,7 @@ rare_condition_max_profiles: 3
 rare_los_hospital_max_profiles: 3
 rare_condition_action: icd_chapter
 rare_procedure_generalize: true
-los_jitter_high_risk: true
+los_jitter_high_risk: false
 keep_encounter_ids: false
 utility_floor: 0.60
 link_threshold: high
