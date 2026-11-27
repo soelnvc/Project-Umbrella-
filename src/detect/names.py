@@ -1,9 +1,9 @@
 """Names found from context in free text.
 
 Rules: relation markers (S/o, W/o, पुत्र, C/O before a person), a name just before a relation
-marker ("Asha, W/o Kamal"), honorifics before or after a name (Shahid sahab, Smt. Kamla, श्री
-राम), Hinglish and Hindi postpositions (Shahid ka BP, शाहिद को), timeline entries ("14:00 -
-Brajesh Yadav"), attendant notes ("Zorawar Qadri (attendant") and chat sender headers.
+marker ("Meera, W/o Suresh"), honorifics before or after a name (Tariq sahab, Smt. Deepa, श्री
+राम), Hinglish and Hindi postpositions (Tariq ka BP, तारिक को), timeline entries ("14:00 -
+Pradeep Kulkarni"), attendant notes ("Kiran Menon (attendant") and chat sender headers.
 """
 from __future__ import annotations
 

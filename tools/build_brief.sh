@@ -8,5 +8,8 @@ PROFILE="$(mktemp -d)"
 trap 'rm -rf "$PROFILE"' EXIT
 "$CHROME" --headless --disable-gpu --no-pdf-header-footer --user-data-dir="$PROFILE" \
   --print-to-pdf="$(pwd)/docs/brief.pdf" "file://$(pwd)/docs/brief.html" 2>/dev/null
-pages=$(python3 -c 'import re, sys; print(len(re.findall(rb"/Type\s*/Page\b", open(sys.argv[1], "rb").read())))' docs/brief.pdf)
+pages=$(mdls -raw -name kMDItemNumberOfPages docs/brief.pdf 2>/dev/null || true)
+if [ -z "$pages" ] || [ "$pages" = "(null)" ]; then
+  pages=$(python3 -c 'import re, sys; print(len(re.findall(rb"/Type\s*/Page\b", open(sys.argv[1], "rb").read())))' docs/brief.pdf)
+fi
 echo "docs/brief.pdf: $pages pages"

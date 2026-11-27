@@ -70,7 +70,7 @@ _LAST_DIGITS = re.compile(r"(\d{5,})\D*$")
 
 
 def id_cores(views: dict, spans_by_field: dict, resolve) -> set[str]:
-    """The last digit group of each record number found in the file ("010565" in UHID-010565)."""
+    """The last digit group of each record number found in the file ("098765" in UHID-098765)."""
     cores: set[str] = set()
     for address, spans in spans_by_field.items():
         text = views.get(address)

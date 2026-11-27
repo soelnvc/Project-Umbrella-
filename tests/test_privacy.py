@@ -187,3 +187,18 @@ def test_rare_threshold_scales_with_cohort_size(tmp_path, monkeypatch):
     assert pipeline.run(inp, out) == 0
     assert "Bell's palsy (G51.0)" in (out / "sanitized/a.txt").read_text()
     assert "E00-E90" in (out / "sanitized/c.txt").read_text()
+
+
+def test_negative_age_artifact_is_banded(tmp_path, monkeypatch):
+    monkeypatch.setenv("RAKSHA_SECRET", "s")
+    inp = tmp_path / "in"
+    inp.mkdir()
+    (inp / "reg.tsv").write_text("UHID\tName\tUmar\nHOSP-00001\tKiran Menon\t-2 वर्ष\n")
+    (inp / "note.txt").write_text("Name: Kiran Menon\nUHID: HOSP-00001\nAge: -2\n")
+    out = tmp_path / "out"
+    assert pipeline.run(inp, out) == 0
+    tsv = (out / "sanitized/reg.tsv").read_text()
+    note = (out / "sanitized/note.txt").read_text()
+    assert "-2" not in tsv and "0-" in tsv
+    assert "-2" not in note and "0-" in note
+

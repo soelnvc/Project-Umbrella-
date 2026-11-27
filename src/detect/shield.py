@@ -89,7 +89,7 @@ def _keep(start: int, end: int, source: str) -> Span:
 def complaint_like(rest: str) -> bool:
     """True when the words after C/O describe a complaint, not a person (decision A in plan.md).
 
-    Only the first clause counts: in "C/O Ramesh Patel, Ward 1" the ward belongs to the address.
+    Only the first clause counts: in "C/O Pradeep Kulkarni, Ward 1" the ward belongs to the address.
     """
     rest = _CLAUSE_END.split(rest.strip(" :-"), maxsplit=1)[0].strip()
     if not rest:

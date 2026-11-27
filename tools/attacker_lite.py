@@ -39,8 +39,9 @@ _HOUSE = re.compile(r"(?:H\.?\s*No\.?|House\s*No\.?|मकान\s*(?:नं|न
 _PIN = re.compile(r"(?<!\d)(\d{6})(?!\d)")
 _PIN_PREFIX = re.compile(r"(?<!\d)(\d{3})(?:\*{3}|[Xx]{3})")
 _AGE_TEXT = [
-    re.compile(r"(?:Age|आयु|उम्र)\s*[:\-]?\s*(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?(\+)?", re.I),
-    re.compile(r"\b(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?(\+)?\s*(?:Yrs?|Years?|वर्ष|साल)\b", re.I),
+    re.compile(r"(?<![A-Za-z])(?:Age|Umar|Umr|आयु|उम्र)(?![A-Za-z])\s*[:\-]?\s*(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?(\+)?", re.I),
+    re.compile(r"(?<!\bx\s)(?<!×\s)(?<!\bfor\s)(?<!\bsince\s)(?<!\bpast\s)(?<!\blast\s)(?<!\bover\s)"
+               r"\b(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?(\+)?\s*(?:Yrs?|Years?|वर्ष|साल)\b(?!\s+(?:back|ago|duration))", re.I),
     re.compile(r"\b(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?(\+)?\s*/\s*[MF]\b"),
     re.compile(r"\[(\d{1,3}),\s*(\d{1,3})\)"),
 ]
@@ -214,7 +215,7 @@ def extract(pairs, register: Register) -> Evidence:
                 ev.filters["gender"].add("M")
             elif v in ("f", "female", "महिला", "स्त्री"):
                 ev.filters["gender"].add("F")
-        if re.search(r"\bage\b|umr|aayu|आयु|उम्र", last.replace("_", " ")):
+        if re.search(r"\bage\b|umr|umar|aayu|आयु|उम्र", last.replace("_", " ")):
             m = _AGE_VALUE.match(value)
             if m and (r := _age_ranges(*m.groups())):
                 ev.filters["age"].add(r)

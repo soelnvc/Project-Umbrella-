@@ -23,8 +23,7 @@ _SAFE_FILE_WORDS = frozenset({
     "results", "claims", "patients", "registration", "export", "exports", "legacy", "lab", "labs",
     "bundle", "visits", "whatsapp", "forward", "doc", "file", "data", "records", "list", "sheet", "log",
     "clean", "misc", "fhir", "billing", "prescriptions", "protocol", "guidelines", "formulary",
-    "tariffs", "antibiogram", "ward", "hospital", "clinic", "sadan", "seva", "arogya", "sanjeevani",
-    "jeevan", "jyoti", "jeevanjyoti",
+    "tariffs", "antibiogram", "ward", "hospital", "clinic", "sadan", "seva",
 })
 
 
@@ -46,12 +45,12 @@ def listed_names(text: str, source: str, need_caps: bool = True) -> list[Span]:
 
 
 def _uppercase_ids(text: str) -> list[Span]:
-    """Hospital numbers written in lower case ("adm000161", "ipd-2026-00474")."""
+    """Hospital numbers written in lower case ("adm009876", "ipd-2026-09876")."""
     return [s for s in patterns.find_identifiers(text.upper()) if s.type == "MRN"]
 
 
 def path_spans(value: str) -> list[Span]:
-    """Personal data in a path-shaped value ("D:\\HIS\\exports\\opd\\Anita_Sharma_010565\\...")."""
+    """Personal data in a path-shaped value ("D:\\HIS\\exports\\opd\\Kavita_Nair_098765\\...")."""
     if not _PATH.match(value.strip()):
         return []
     view = value.translate(str.maketrans("_\\/", "   "))

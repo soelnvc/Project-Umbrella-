@@ -202,3 +202,10 @@ def test_lowercase_filename_with_hindi_body_and_shared_dirty_folder(tmp_path, mo
     assert any(r.startswith("notes/doc_") for r in rels)
     exp = [r for r in rels if r.startswith("exports/")]
     assert len(exp) == 2 and exp[0].split("/")[1] == exp[1].split("/")[1] and exp[0].split("/")[1].startswith("dir_")
+
+
+def test_given_name_in_filename_is_renamed():
+    assert channels.name_spans("patient_jyoti", None)
+    assert channels.name_spans("jyoti_ds_01", None)
+    assert channels.renamed_path("notes/patient_jyoti.txt", "ab" * 32, KEYS, None).startswith("notes/doc_")
+

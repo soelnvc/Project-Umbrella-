@@ -172,3 +172,20 @@ def test_overlaps_resolve_to_the_longest_span():
     text = "PMJAY-UP-8758791961"
     spans = resolve(patterns.find_identifiers(text))
     assert len(spans) == 1 and (spans[0].start, spans[0].end, spans[0].type) == (0, len(text), "INSURANCE_ID")
+
+
+def test_district_ending_in_nagar_is_not_redacted_as_locality():
+    from src.detect import address
+    for sample in (
+        "H.No. 12, District Ambedkar Nagar, UP",
+        "House 5, Tehsil Kushinagar, District Gautam Buddha Nagar",
+    ):
+        found = [(s.type, sample[s.start:s.end]) for s in address.find_address(sample)]
+        assert not any(t == "LOCALITY" and ("District" in v or "Tehsil" in v) for t, v in found), found
+
+
+def test_percent_utf8_normalization_without_urllib():
+    from src.detect import normalize
+    view = normalize.View("Patient: %E0%A4%85%E0%A4%A8%E0%A4%BF%E0%A4%A4%E0%A4%BE%20Sharma")
+    assert view.text == "Patient: अनिता Sharma"
+

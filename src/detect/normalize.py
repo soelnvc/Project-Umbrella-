@@ -10,7 +10,6 @@ from __future__ import annotations
 import html
 import re
 import unicodedata
-from urllib.parse import unquote_to_bytes
 
 from src.core.models import Span
 
@@ -78,8 +77,9 @@ class View:
             elif ch == "%":
                 m = _PERCENT_RUN.match(original, i)
                 if m:
+                    run = m.group(0)
                     try:
-                        decoded = unquote_to_bytes(m.group(0)).decode("utf-8")
+                        decoded = bytes(int(run[j + 1:j + 3], 16) for j in range(0, len(run), 3)).decode("utf-8")
                     except UnicodeDecodeError:
                         decoded = None
                     if decoded:

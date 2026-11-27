@@ -107,7 +107,7 @@ _ID_THEN_NAME = re.compile(rf"(?:^|\s)[A-Z][A-Za-z]{{0,5}}[-/_]?\d[\d\-/]{{3,}}\
 
 
 def _names_after_ids(head: str) -> list[Span]:
-    """Header cells such as "HOSP-0012345 Zainab": a name right after a record number."""
+    """Header cells such as "HOSP-0098765 Deepa": a name right after a record number."""
     return [Span(view=-1, start=m.start("name"), end=m.end("name"), type="PATIENT_NAME", role="patient",
                  action="redact", source="header", priority=28) for m in _ID_THEN_NAME.finditer(head)]
 
@@ -255,7 +255,7 @@ def iter_keys(data):
 
 
 def _detect_keys(parsed: ParsedFile, views: dict) -> None:
-    """Object keys that are personal data ("by_name": {"Zainab Siddiqui": ...})."""
+    """Object keys that are personal data ("by_name": {"Deepa Nair": ...})."""
     for parent_path, key in iter_keys(parsed.data):
         if not isinstance(key, str) or not key.strip():
             continue

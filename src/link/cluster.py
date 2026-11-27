@@ -202,7 +202,7 @@ def _village_age_match(a: RecordClues, b: RecordClues) -> bool:
 
 
 def _link_single_names(records: list[RecordClues], eligible: list[int], clusters: _Clusters) -> None:
-    """One-word names ("मोहम्मद शाहिद" -> shahid) with the same village and a compatible age.
+    """One-word names ("तारिक अंसारी" -> ansari) with the same village and a compatible age.
 
     Linked only when exactly one existing patient group fits, so two people who share a first
     name and a village are never merged.

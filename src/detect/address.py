@@ -25,7 +25,7 @@ _LOCALITY = re.compile(
     rf"(?<![A-Za-z])(?:Mohalla|Mohallah|Mohala|Mohl\.)[ \t]+(?!{_ADMIN}){_NAME_WORDS}"
     r"|(?i:(?<![A-Za-z])(?:Gali|Lane|Sector)[ \t]*(?:No\.?[ \t]*)?\d+[A-Za-z]?)"
     r"|(?i:(?<![A-Za-z])Ward[ \t]*(?:No\.?[ \t]*)?\d+)"
-    r"|(?P<urban>(?<![A-Za-z])(?!{_ADMIN})[A-Z][A-Za-z'’-]+(?:[ \t]+(?!{_ADMIN})[A-Z][A-Za-z'’-]+){0,2}[ \t]+"
+    rf"|(?P<urban>(?<![A-Za-z])(?!{_ADMIN})[A-Z][A-Za-z'’-]+(?:[ \t]+(?!{_ADMIN})[A-Z][A-Za-z'’-]+){{0,2}}[ \t]+"
     r"(?:Colony|Nagar|Vihar|Enclave|Puram)\b)"
     rf"|मोहल्ला[ \t]+{_DEVA_WORDS}|गली[ \t]*(?:नं\.?)?[ \t]*[\d]+|वार्ड[ \t]*(?:नं\.?)?[ \t]*[\d]+")
 _LANDMARK = re.compile(

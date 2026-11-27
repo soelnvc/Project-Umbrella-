@@ -12,7 +12,7 @@ import re
 
 from src.core.models import Span
 
-_B64 = re.compile(r"(?<![A-Za-z0-9+/=_-])[A-Za-z0-9+/]{12,}={0,2}(?![A-Za-z0-9+/=_-])")
+_B64 = re.compile(r"(?<![A-Za-z0-9+/=_-])[A-Za-z0-9+/]{14,}={0,2}(?![A-Za-z0-9+/=_-])")
 _B64_URL = re.compile(r"(?<![A-Za-z0-9+/=_-])(?=[A-Za-z0-9_-]*[-_])[A-Za-z0-9_-]{16,}={0,2}(?![A-Za-z0-9+/=_-])")
 _DATA_URI = re.compile(r"data:[A-Za-z0-9.+/-]+;base64,(?P<b64>[A-Za-z0-9+/=\s]{16,})")
 _HEX = re.compile(r"(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{2}){10,}(?![0-9A-Fa-f])")

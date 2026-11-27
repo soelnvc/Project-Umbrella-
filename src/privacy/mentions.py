@@ -30,8 +30,8 @@ _DISCHARGE = re.compile(r"(?i)(?:date\s+of\s+discharge|discharged\s+on|discharge
 _DOB = re.compile(r"(?i)(?:\bdob\b|d\.o\.b|date\s+of\s+birth|birth\s*(?:date|dt|day)|birthdate|janam|janm|जन्म)")
 _AGE_SEX = re.compile(rf"(?i)(?<![\d.])(?P<age>\d{{1,3}})\s*(?:y(?:rs?|ears?)?\.?|वर्ष|साल)?\s*[/,]\s*"
                       rf"(?:m|f|male|female|पुरुष|महिला)(?![A-Za-z{DEVA}])")
-_AGE_LABEL = re.compile(rf"(?i)(?<![A-Za-z])(?:age|aayu|umr|umar)(?![A-Za-z])\s*(?:/\s*sex)?\s*[:\-]?\s*(?P<age>\d{{1,3}})\b"
-                        rf"|(?:आयु|उम्र)\s*[:\-]?\s*(?P<age2>\d{{1,3}})")
+_AGE_LABEL = re.compile(rf"(?i)(?<![A-Za-z])(?:age|aayu|umr|umar)(?![A-Za-z])\s*(?:/\s*sex)?\s*[:\-]?\s*(?P<age>-?\d{{1,3}})\b"
+                        rf"|(?:आयु|उम्र)\s*[:\-]?\s*(?P<age2>-?\d{{1,3}})")
 _AGE_OLD = re.compile(r"(?i)(?<![\d.])(?P<age>\d{1,3})\s*(?:years?|yrs?)\s+old\b")
 _TEHSIL = re.compile(rf"(?:(?i:Tehsil|Teh\.?)\s+(?P<lat>[A-Z][\w]+(?:[ \t]+[A-Z][\w]+)?)|तहसील\s+(?P<dev>[{DEVA}]+))")
 _DISTRICT = re.compile(rf"(?:(?i:Distt?\.?|District)\s+(?P<lat>[A-Z][\w]+(?:[ \t]+[A-Z][\w]+)?)|जिला\s+(?P<dev>[{DEVA}]+))")
@@ -55,7 +55,7 @@ def _date_context(hint: str, text: str, start: int, prev_end: int = 0) -> str:
 _AGE_TOKENS = frozenset({"age", "umar", "umr", "aayu", "आयु", "उम्र"})
 _NON_AGE_PARENT = frozenset({"duration", "history", "medication", "medications", "rx", "treatment",
                              "dose", "dosage", "course", "smoking", "exposure", "followup", "follow_up"})
-_AGE_ONLY_VALUE = re.compile(r"^\s*(\d{1,3})\s*(?:y(?:rs?|ears?)?\.?|वर्ष|साल)?\s*$", re.IGNORECASE)
+_AGE_ONLY_VALUE = re.compile(r"^\s*(-?\d{1,3})\s*(?:y(?:rs?|ears?)?\.?|वर्ष|साल)?\s*$", re.IGNORECASE)
 
 
 def _age_hint(hint: str) -> bool:
@@ -71,8 +71,11 @@ def _age_hint(hint: str) -> bool:
     return False
 
 
-def _valid_age(value: int) -> bool:
-    return 0 <= value <= 115
+def _clean_age(value: int) -> int | None:
+    """Return a valid non-negative age; small negative input artifacts clamp to 0 so they still band."""
+    if -5 <= value < 0:
+        return 0
+    return value if 0 <= value <= 115 else None
 
 
 def field_mentions(hint: str, text: str, conv: str, fhir_type: str | None = None) -> list[Mention]:
@@ -90,16 +93,16 @@ def field_mentions(hint: str, text: str, conv: str, fhir_type: str | None = None
         if 1850 <= yr <= 2100 and 1 <= mo <= 12:
             out.append(Mention(lead, lead + len(stripped), "date", dt.date(yr, mo, 1), "dob"))
     if _age_hint(hint):
-        m = _AGE_ONLY_VALUE.match(text) if last == "years" else re.match(r"\s*(\d{1,3})(?!\d)", text)
+        m = _AGE_ONLY_VALUE.match(text) if last == "years" else re.match(r"\s*(-?\d{1,3})(?!\d)", text)
         if m and not _AGE_SEX.match(text):
-            val = int(m.group(1))
-            if _valid_age(val):
+            val = _clean_age(int(m.group(1)))
+            if val is not None:
                 out.append(Mention(m.start(1), m.end(1), "age", val))
     for rx in (_AGE_SEX, _AGE_LABEL, _AGE_OLD):
         for m in rx.finditer(text):
             group = "age2" if rx is _AGE_LABEL and m.group("age") is None else "age"
-            val = int(m.group(group))
-            if _valid_age(val):
+            val = _clean_age(int(m.group(group)))
+            if val is not None:
                 out.append(Mention(m.start(group), m.end(group), "age", val))
     if stripped and vocab.has(last, ("tehsil", "taluka")) or last.endswith("block"):
         if stripped:

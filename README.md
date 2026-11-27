@@ -80,9 +80,9 @@ flowchart TD
     SEC -->|"HMAC-SHA256 Subkeys"| K2["±30..180d Shift (Per Patient)"]
     SEC -->|"HMAC-SHA256 Subkeys"| K3["ID- / NAME- / doc_ / dir_ Tokens"]
 
-    N1["मोहम्मद शाहिद (Devanagari)"] -->|"Custom Transliteration"| SK["Phonetic Skeleton + Second Clue"]
-    N2["Mohammad Shahid (English)"] --> SK
-    N3["Mohd. Shahid (Hinglish)"] --> SK
+    N1["मोहम्मद तारिक (Devanagari)"] -->|"Custom Transliteration"| SK["Phonetic Skeleton + Second Clue"]
+    N2["Mohammad Tariq (English)"] --> SK
+    N3["Mohd. Tariq (Hinglish)"] --> SK
     SK -->|"No Gender / DOB / ID / Relative Conflict"| K1
 
     classDef key fill:#fff8ec,stroke:#b5651d,color:#16202a,stroke-width:1.5px;
@@ -120,7 +120,7 @@ Project-Umbrella-/
 │   ├── chaos_mutator.py     Scrambles names, scripts, IDs, headers, keys, base64 & dates to test unseen formats
 │   ├── leak_check.py        Scorer-equivalent normalized & base64-decoded leak counter
 │   └── scale_check.py       Runtime & RSS growth-exponent profiler up to 144k records
-└── tests/                   354 unit & regression tests across every module and trap category
+└── tests/                   358 unit & regression tests across every module and trap category
 ```
 
 ---
@@ -153,7 +153,7 @@ Shield spans block name/address false positives while allowing direct-identifier
 | **Clinical Wards, Eponyms, Roles & Lexicons** | `Ward 8 (Medicine)`, `Bed 29`, `Addison's disease`, `Foley catheter`, `ASHA worker` *(vs. patient `Asha`)*, hospitals/labs, `HbA1c`, `SG039B`, UP & all-India districts |
 
 ### 4. Conservative Cross-Script Record Linkage (`src/link/`)
-- **Script-independent matching:** Custom Devanagari-to-Latin transliteration (schwa deletion, anusvara, nukta) + phonetic consonant skeletons equate *मोहम्मद शाहिद*, *Mohammad Shahid*, and *Mohd. Shahid* while keeping *Rina* ≠ *Rani*. Generic tokens (`Mohd.`, `Kumar`, `Devi`, `Singh`) never link alone.
+- **Script-independent matching:** Custom Devanagari-to-Latin transliteration (schwa deletion, anusvara, nukta) + phonetic consonant skeletons equate *मोहम्मद तारिक*, *Mohammad Tariq*, and *Mohd. Tariq* while keeping *Rina* ≠ *Rani*. Generic tokens (`Mohd.`, `Kumar`, `Devi`, `Singh`) never link alone.
 - **Linear-time blocking & hard vetoes:** Compound blocking on `(name_skeleton, dob | relative | village)` plus clue-signature deduplication avoids dropping common surnames while scaling linearly. Links require a strong ID, a non-household phone/insurance ID, or name + second clue. **Zero-false-merge vetoes** reject any conflict on gender, Aadhaar/ABHA, same-role relative, name, or DOB/birth year; multi-patient index sheets stay unlinked (`patient: null`).
 - **Consistent placement:** `PSN-XXXXXXXX` replaces the patient's record-number field, FHIR `Patient.identifier`, or fallback patient-name spans (`100%` agreement between `sanitized/` and `records.jsonl`).
 

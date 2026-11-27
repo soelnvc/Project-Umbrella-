@@ -1,7 +1,7 @@
 """Phonetic name keys that survive Indian spelling variation and script changes.
 
 fold():     a vowel-keeping form for close comparison  (Reena, Rina, रीना -> "rina")
-skeleton(): consonants only, for blocking               (Shahid, शाहिद -> "sd")
+skeleton(): consonants only, for blocking               (Tariq, तारिक -> "trk")
 Generic parts (Mohd., Devi, Kumar, ji) are dropped from name keys: they identify no one.
 """
 from __future__ import annotations

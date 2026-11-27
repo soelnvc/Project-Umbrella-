@@ -1,4 +1,4 @@
-"""Devanagari to Latin, for comparing names across scripts (मोहम्मद शाहिद ~ Mohammad Shahid).
+"""Devanagari to Latin, for comparing names across scripts (तारिक अंसारी ~ Tariq Ansari).
 
 A small table of our own: consonants carry an inherent "a" unless a vowel sign or halant
 follows; the final inherent "a" of a word is dropped; anusvara becomes n or m by the next
